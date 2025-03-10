@@ -10,7 +10,9 @@ namespace rd03e_radar {
 
 class RD03ERadarSensor : public Component, public uart::UARTDevice {
  public:
-  RD03ERadarSensor(uart::UARTComponent *parent) : UARTDevice(parent) {}
+  RD03ERadarSensor() = default;
+
+  void set_uart_parent(uart::UARTComponent *parent) { this->set_uart_parent_(parent); }
 
   void setup() override;
   void loop() override;
