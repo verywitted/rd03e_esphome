@@ -1,9 +1,9 @@
 #pragma once
 
-#include "esphome/core/component.h"
-#include "esphome/components/uart/uart.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
-#include "esphome/components/sensor/sensor.h"
+#include <esphome/core/component.h>
+#include <esphome/components/uart/uart.h>
+#include <esphome/components/binary_sensor/binary_sensor.h>
+#include <esphome/components/sensor/sensor.h>
 
 namespace esphome {
 namespace rd03e_radar {
@@ -12,7 +12,7 @@ class RD03ERadarSensor : public Component, public uart::UARTDevice {
  public:
   RD03ERadarSensor() = default;
 
-  void set_uart_parent(uart::UARTComponent *parent) { this->set_uart_parent_(parent); }
+  void set_uart_parent(uart::UARTComponent *parent) { uart::UARTDevice::set_uart_parent(parent); }
 
   void setup() override;
   void loop() override;

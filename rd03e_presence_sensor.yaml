@@ -3,6 +3,8 @@ esphome:
   friendly_name: Radar Presence Sensor
   includes:
     - components/rd03e_radar/
+  libraries:
+    - "ArduinoJson@6.18.5"
 
 external_components:
   - source: components

@@ -1,5 +1,5 @@
 #include "rd03e_radar.h"
-#include "esphome/core/log.h"
+#include <esphome/core/log.h>
 
 namespace esphome {
 namespace rd03e_radar {

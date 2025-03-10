@@ -14,17 +14,13 @@ from esphome.const import (
 
 DEPENDENCIES = ['uart']
 AUTO_LOAD = ['binary_sensor', 'sensor']
-CODEOWNERS = ['@esphome/core']
-
-# Component name for YAML
-COMPONENT_TYPE = "rd03e_radar"
+MULTI_CONF = True
 
 CONF_PRESENCE = "presence"
 CONF_MOVEMENT = "movement"
 CONF_DETECTION_DISTANCE = "detection_distance"
 CONF_SENSITIVITY = "sensitivity"
 
-# Ensure namespace matches the component name
 rd03e_radar_ns = cg.esphome_ns.namespace('rd03e_radar')
 RD03ERadarSensor = rd03e_radar_ns.class_('RD03ERadarSensor', cg.Component, uart.UARTDevice)
 
@@ -52,7 +48,6 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     
-    # Get the UART component
     uart_component = await cg.get_variable(config[CONF_UART_ID])
     cg.add(var.set_uart_parent(uart_component))
     
