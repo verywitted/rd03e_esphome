@@ -6,6 +6,11 @@ namespace rd03e_radar {
 
 static const char *TAG = "rd03e_radar";
 
+// Prevent multiple definition errors by making implementation-only functions
+// Include guard
+#ifndef RD03E_RADAR_CPP_
+#define RD03E_RADAR_CPP_
+
 void RD03ERadarSensor::setup() {
   ESP_LOGI(TAG, "Setting up RD03-E radar sensor...");
   
@@ -176,6 +181,8 @@ void RD03ERadarSensor::process_frame_() {
     ESP_LOGW(TAG, "Invalid checksum in received frame");
   }
 }
+
+#endif  // RD03E_RADAR_CPP_
 
 }  // namespace rd03e_radar
 }  // namespace esphome

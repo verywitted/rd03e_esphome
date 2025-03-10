@@ -12,16 +12,16 @@ class RD03ERadarSensor : public Component, public uart::UARTDevice {
  public:
   RD03ERadarSensor() = default;
 
-  void set_uart_parent(uart::UARTComponent *parent) { uart::UARTDevice::set_uart_parent(parent); }
+  inline void set_uart_parent(uart::UARTComponent *parent) { uart::UARTDevice::set_uart_parent(parent); }
 
   void setup() override;
   void loop() override;
   void dump_config() override;
-  float get_setup_priority() const override { return setup_priority::LATE; }
+  inline float get_setup_priority() const override { return setup_priority::LATE; }
 
-  void set_presence_sensor(binary_sensor::BinarySensor *presence_sensor) { presence_sensor_ = presence_sensor; }
-  void set_movement_sensor(binary_sensor::BinarySensor *movement_sensor) { movement_sensor_ = movement_sensor; }
-  void set_distance_sensor(sensor::Sensor *distance_sensor) { distance_sensor_ = distance_sensor; }
+  inline void set_presence_sensor(binary_sensor::BinarySensor *presence_sensor) { presence_sensor_ = presence_sensor; }
+  inline void set_movement_sensor(binary_sensor::BinarySensor *movement_sensor) { movement_sensor_ = movement_sensor; }
+  inline void set_distance_sensor(sensor::Sensor *distance_sensor) { distance_sensor_ = distance_sensor; }
 
   void set_detection_distance(float distance);
   void set_sensitivity(uint8_t sensitivity);
