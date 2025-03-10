@@ -1,6 +1,8 @@
 esphome:
   name: rd03e_presence_sensor
   friendly_name: Radar Presence Sensor
+  includes:
+    - components/rd03e_radar/
 
 esp32:
   board: esp32dev
@@ -12,8 +14,9 @@ logger:
 
 # Enable Home Assistant API
 api:
-
+  
 ota:
+  
 
 wifi:
   ssid: !secret wifi_ssid
@@ -36,34 +39,32 @@ uart:
   parity: NONE
   stop_bits: 1
 
-# Custom component to handle RD03-E radar sensor data
-binary_sensor:
-  - platform: custom
-    lambda: |-
-      auto rd03e_sensor = new RD03ESensor(id(uart_bus));
-      App.register_component(rd03e_sensor);
-      return {rd03e_sensor->presence_sensor, rd03e_sensor->movement_sensor};
-    binary_sensors:
-      - name: "Presence Detected"
-        device_class: occupancy
-        id: presence_detected
-      - name: "Movement Detected"
-        device_class: motion
-        id: movement_detected
+# RD03-E radar sensor component
+rd03e_radar:
+  id: radar_sensor
+  uart_id: uart_bus
+  # Binary sensor for presence detection
+  presence:
+    name: "Presence Detected"
+    device_class: occupancy
+    id: presence_detected
+  # Binary sensor for movement detection
+  movement:
+    name: "Movement Detected"
+    device_class: motion
+    id: movement_detected
+  # Sensor for distance measurement
+  distance:
+    name: "Detection Distance"
+    unit_of_measurement: "m"
+    accuracy_decimals: 2
+    id: detection_distance
+    device_class: distance
+  # Configuration settings
+  detection_distance: 3.0
+  sensitivity: 5
 
-# Add sensors for additional data from the radar
-sensor:
-  - platform: custom
-    lambda: |-
-      return {rd03e_sensor->distance_sensor};
-    sensors:
-      - name: "Detection Distance"
-        unit_of_measurement: "m"
-        accuracy_decimals: 2
-        id: detection_distance
-        device_class: distance
-
-# Expose configuration parameters as number inputs
+# Add template number entities to control the sensor settings
 number:
   - platform: template
     name: "Detection Distance Setting"
@@ -77,7 +78,7 @@ number:
     on_value:
       then:
         - lambda: |-
-            id(rd03e_sensor).set_detection_distance(x);
+            id(radar_sensor).set_detection_distance(x);
 
   - platform: template
     name: "Sensitivity Setting"
@@ -91,185 +92,4 @@ number:
     on_value:
       then:
         - lambda: |-
-            id(rd03e_sensor).set_sensitivity(x);
-
-# Custom component code implementation
-custom_component:
-  - lambda: |-
-      class RD03ESensor : public Component, public UARTDevice {
-       public:
-        BinarySensor *presence_sensor = new BinarySensor();
-        BinarySensor *movement_sensor = new BinarySensor();
-        Sensor *distance_sensor = new Sensor();
-        
-        // Buffer for receiving UART data
-        static const uint8_t BUFFER_SIZE = 20;
-        uint8_t buffer[BUFFER_SIZE];
-        uint8_t buffer_index = 0;
-        
-        // Message frame details
-        static const uint8_t FRAME_HEADER_1 = 0x55;
-        static const uint8_t FRAME_HEADER_2 = 0xAA;
-        static const uint8_t FRAME_LENGTH = 13;  // Total frame length
-        
-        // Status tracking
-        bool frame_started = false;
-        bool waiting_for_header2 = false;
-        
-        // Configuration settings
-        float detection_distance = 3.0;
-        uint8_t sensitivity = 5;
-        bool config_pending = true;
-        
-        RD03ESensor(UARTComponent *parent) : UARTDevice(parent) {}
-        
-        void setup() override {
-          // Initialize the sensor with default values
-          ESP_LOGI("rd03e", "Initializing RD03-E radar sensor");
-          
-          // Set initial states
-          presence_sensor->publish_state(false);
-          movement_sensor->publish_state(false);
-          distance_sensor->publish_state(0.0);
-          
-          // Reset buffer
-          buffer_index = 0;
-          memset(buffer, 0, BUFFER_SIZE);
-        }
-        
-        void loop() override {
-          // Send configuration if pending
-          if (config_pending) {
-            send_config_command();
-            config_pending = false;
-          }
-          
-          // Process incoming data
-          while (available() > 0) {
-            uint8_t data = read();
-            process_byte(data);
-          }
-        }
-        
-        void set_detection_distance(float distance) {
-          ESP_LOGI("rd03e", "Setting detection distance to %.1fm", distance);
-          this->detection_distance = distance;
-          config_pending = true;
-        }
-        
-        void set_sensitivity(float sens) {
-          ESP_LOGI("rd03e", "Setting sensitivity to %d", (uint8_t)sens);
-          this->sensitivity = (uint8_t)sens;
-          config_pending = true;
-        }
-        
-        void send_config_command() {
-          // Format: [0x55][0xAA][CMD][LEN][DATA...][CHECKSUM]
-          uint8_t cmd[13];
-          
-          // Header
-          cmd[0] = FRAME_HEADER_1;
-          cmd[1] = FRAME_HEADER_2;
-          
-          // Command 0xA1 = Set Parameters
-          cmd[2] = 0xA1;
-          
-          // Data length (8 bytes)
-          cmd[3] = 0x08;
-          
-          // Data payload
-          cmd[4] = (uint8_t)(detection_distance * 10);  // Distance in decimeters
-          cmd[5] = sensitivity;                         // Sensitivity level
-          cmd[6] = 0x01;                                // Enable continuous mode
-          cmd[7] = 0x00;                                // Reserved
-          cmd[8] = 0x00;                                // Reserved
-          cmd[9] = 0x00;                                // Reserved
-          cmd[10] = 0x00;                               // Reserved
-          cmd[11] = 0x00;                               // Reserved
-          
-          // Calculate checksum (XOR of all previous bytes)
-          cmd[12] = 0x00;
-          for (int i = 0; i < 12; i++) {
-            cmd[12] ^= cmd[i];
-          }
-          
-          // Send the command
-          write_array(cmd, 13);
-          ESP_LOGI("rd03e", "Sent configuration command");
-        }
-        
-        void process_byte(uint8_t data) {
-          // Look for frame header sequence
-          if (!frame_started) {
-            if (!waiting_for_header2) {
-              if (data == FRAME_HEADER_1) {
-                waiting_for_header2 = true;
-                buffer[0] = data;
-                buffer_index = 1;
-              }
-            } else {
-              if (data == FRAME_HEADER_2) {
-                frame_started = true;
-                buffer[buffer_index++] = data;
-              } else {
-                // Reset if the second byte is not the expected header
-                waiting_for_header2 = false;
-                buffer_index = 0;
-              }
-            }
-          } else {
-            // Add byte to buffer
-            buffer[buffer_index++] = data;
-            
-            // If we have received a complete frame
-            if (buffer_index == FRAME_LENGTH) {
-              process_frame();
-              
-              // Reset for next frame
-              frame_started = false;
-              waiting_for_header2 = false;
-              buffer_index = 0;
-            }
-            
-            // Prevent buffer overflow
-            if (buffer_index >= BUFFER_SIZE) {
-              frame_started = false;
-              waiting_for_header2 = false;
-              buffer_index = 0;
-            }
-          }
-        }
-        
-        void process_frame() {
-          // Verify the frame with checksum
-          uint8_t calculated_checksum = 0;
-          for (int i = 0; i < FRAME_LENGTH - 1; i++) {
-            calculated_checksum ^= buffer[i];
-          }
-          
-          // If checksum matches
-          if (calculated_checksum == buffer[FRAME_LENGTH - 1]) {
-            // Check command type
-            if (buffer[2] == 0x01) {  // Status report
-              // Extract presence state (0x01 = presence, 0x00 = no presence)
-              bool presence = buffer[4] == 0x01;
-              presence_sensor->publish_state(presence);
-              
-              // Extract movement state
-              bool movement = buffer[5] == 0x01;
-              movement_sensor->publish_state(movement);
-              
-              // Extract distance (bytes 6-7 contain distance in cm)
-              float distance = (buffer[6] + (buffer[7] << 8)) / 100.0;  // Convert to meters
-              if (distance > 0 && distance <= 8.0) {  // Valid range check
-                distance_sensor->publish_state(distance);
-              }
-              
-              ESP_LOGD("rd03e", "Presence: %d, Movement: %d, Distance: %.2fm", 
-                      presence, movement, distance);
-            }
-          } else {
-            ESP_LOGW("rd03e", "Invalid checksum in received frame");
-          }
-        }
-      };
+            id(radar_sensor).set_sensitivity(x);
