@@ -16,6 +16,7 @@
 // MQTT Topics - Zigbee2MQTT integration
 #define MQTT_Z2M_PREFIX "zigbee2mqtt"
 #define MQTT_DEVICE_ID "rd03e_radar"
+#define MQTT_UNIQUE_ID "D30EFD30EF"
 
 // Device topic structure
 #define MQTT_BASE_TOPIC MQTT_Z2M_PREFIX "/" MQTT_DEVICE_ID
@@ -38,6 +39,6 @@
 #define DEFAULT_SENSITIVITY 5            // Range 1-10
 
 // Other settings
-#define UPDATE_INTERVAL 30000    // 30 seconds between forced updates
+#define UPDATE_INTERVAL 3    // 30 seconds between forced updates
 #define MQTT_RECONNECT_DELAY 5000  // 5 seconds between MQTT reconnection attempts
 #define SERIAL_BAUD_RATE 115200

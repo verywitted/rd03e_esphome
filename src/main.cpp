@@ -104,7 +104,7 @@ void loop() {
   distance_value = new_distance;
   
   // Publish data if changed or periodically (every 30 seconds)
-  if (state_changed || (millis() - last_publish > 30000)) {
+  if (state_changed || (millis() - last_publish > 300)) {
     publish_sensor_data(true);
     last_publish = millis();
   }
@@ -336,12 +336,12 @@ void publish_device_discovery() {
   StaticJsonDocument<768> device_doc; // Increased size to accommodate all device fields
   
   // Device definition information
-  device_doc["friendly_name"] = "RD03-E Radar Sensor";
+  device_doc["name"] = "rd03e_radar";
   device_doc["description"] = "24GHz Radar Presence Sensor";
-  device_doc["model"] = "RD03-E";
-  device_doc["vendor"] = "AI-Thinker";
+  device_doc["model"] = "RD03E";
+  device_doc["vendor"] = "ai-thinker";
   device_doc["supported"] = true;
-  
+  device_doc["id"] = "30EFD30EF";
   // Create exposes array to describe capabilities
   JsonArray exposes = device_doc.createNestedArray("exposes");
   
@@ -397,11 +397,11 @@ void publish_device_discovery() {
   
   // Define device metadata
   JsonObject device_info = device_doc.createNestedObject("device");
-  device_info["manufacturer"] = "AI-Thinker";
-  device_info["model"] = "RD03-E";
+  device_info["manufacturer"] = "ai-thinker";
+  device_info["model"] = "RD03E";
   device_info["sw_version"] = "1.0.0";
   device_info["hw_version"] = "1.0";
-  
+  device_info["id"] = "D30EFD30EF";
   char buffer[768];
   
   // Serialize and check for errors
@@ -433,8 +433,9 @@ void publish_device_discovery() {
     
     // Try with a smaller payload if the full one is too large
     StaticJsonDocument<256> minimal_doc;
-    minimal_doc["friendly_name"] = "RD03-E Radar Sensor";
-    minimal_doc["model"] = "RD03-E";
+    minimal_doc["name"] = "rd03e_radar";
+    minimal_doc["model"] = "RD03E";
+    minimal_doc["id"] = "D30EFD30EF";
     
     char small_buffer[256];
     size_t small_length = serializeJson(minimal_doc, small_buffer, sizeof(small_buffer));

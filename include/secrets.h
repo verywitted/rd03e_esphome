@@ -10,7 +10,7 @@
 // MQTT Broker settings 
 #define MQTT_SERVER "192.168.1.145"  // Replace with your MQTT broker address
 #define MQTT_PORT 1883
-#define MQTT_USER ""               // Replace if you use MQTT authentication
-#define MQTT_PASSWORD ""           // Replace if you use MQTT authentication
+#define MQTT_USER "phil"               // Replace if you use MQTT authentication
+#define MQTT_PASSWORD "HongKong"           // Replace if you use MQTT authentication
 
 
