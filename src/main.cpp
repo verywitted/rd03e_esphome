@@ -136,12 +136,26 @@ void reconnect_mqtt() {
   // Loop until we're reconnected
   int retries = 0;
   while (!mqtt_client.connected() && retries < 5) {
-    Serial.print("Attempting MQTT connection...");
+    Serial.print("[MQTT] Attempting connection to ");
+    Serial.print(mqtt_server);
+    Serial.print(":");
+    Serial.print(mqtt_port);
+    Serial.print(" as ");
+    Serial.println(mqtt_user);
+    
     retries++;
     
     // Create a random client ID with prefix
     String clientId = "ESP32_RD03E_";
     clientId += String(random(0xffff), HEX);
+    
+    Serial.print("[MQTT] Using client ID: ");
+    Serial.println(clientId);
+    
+    // Log LWT details
+    Serial.print("[MQTT] LWT Topic: ");
+    Serial.print(mqtt_status_topic);
+    Serial.println(" Message: offline");
     
     // Attempt to connect with LWT (Last Will and Testament)
     if (mqtt_client.connect(
@@ -153,14 +167,25 @@ void reconnect_mqtt() {
         true,                       // Will Retain
         "offline"                   // Will Message (offline status)
     )) {
-      Serial.println("connected");
+      Serial.println("[MQTT] Connected successfully");
       
       // Subscribe to relevant Zigbee2MQTT topics
-      mqtt_client.subscribe(mqtt_config_topic);       // For configuration
-      mqtt_client.subscribe(MQTT_GET_TOPIC);          // For get requests
-      mqtt_client.subscribe(MQTT_Z2M_BRIDGE_TOPIC);   // For bridge events
+      Serial.print("[MQTT SUB] ");
+      Serial.println(mqtt_config_topic);
+      mqtt_client.subscribe(mqtt_config_topic);
+      
+      Serial.print("[MQTT SUB] ");
+      Serial.println(MQTT_GET_TOPIC);
+      mqtt_client.subscribe(MQTT_GET_TOPIC);
+      
+      Serial.print("[MQTT SUB] ");
+      Serial.println(MQTT_Z2M_BRIDGE_TOPIC);
+      mqtt_client.subscribe(MQTT_Z2M_BRIDGE_TOPIC);
       
       // Publish availability for Zigbee2MQTT
+      Serial.print("[MQTT OUT] Topic: ");
+      Serial.print(mqtt_status_topic);
+      Serial.println(" Payload: online");
       mqtt_client.publish(mqtt_status_topic, "online", true);
       
       // Wait for MQTT infrastructure to process the connection
@@ -177,15 +202,33 @@ void reconnect_mqtt() {
       // Reset retry counter on success
       retries = 0;
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(mqtt_client.state());
-      Serial.println(" try again in 5 seconds");
+      int state = mqtt_client.state();
+      Serial.print("[MQTT ERROR] Connection failed, rc=");
+      Serial.print(state);
+      Serial.print(" (");
+      
+      // Print human-readable error
+      switch(state) {
+        case -4: Serial.print("MQTT_CONNECTION_TIMEOUT"); break;
+        case -3: Serial.print("MQTT_CONNECTION_LOST"); break;
+        case -2: Serial.print("MQTT_CONNECT_FAILED"); break;
+        case -1: Serial.print("MQTT_DISCONNECTED"); break;
+        case 1: Serial.print("MQTT_CONNECT_BAD_PROTOCOL"); break;
+        case 2: Serial.print("MQTT_CONNECT_BAD_CLIENT_ID"); break;
+        case 3: Serial.print("MQTT_CONNECT_UNAVAILABLE"); break;
+        case 4: Serial.print("MQTT_CONNECT_BAD_CREDENTIALS"); break;
+        case 5: Serial.print("MQTT_CONNECT_UNAUTHORIZED"); break;
+        default: Serial.print("UNKNOWN_ERROR"); break;
+      }
+      
+      Serial.println(")");
+      Serial.println("[MQTT] Trying again in 5 seconds");
       delay(5000);
     }
   }
   
   if (!mqtt_client.connected()) {
-    Serial.println("Failed to connect to MQTT after multiple attempts. Will try again later.");
+    Serial.println("[MQTT ERROR] Failed to connect after multiple attempts. Will try again later.");
   }
 }
 
@@ -206,8 +249,20 @@ void publish_sensor_data(bool force) {
   char buffer[200];
   serializeJson(doc, buffer);
   
+  // Debug - Log MQTT publish
+  Serial.print("[MQTT OUT] Topic: ");
+  Serial.print(mqtt_base_topic);
+  Serial.print(" Payload: ");
+  Serial.println(buffer);
+  
   // Publish to main topic in Zigbee2MQTT format
-  mqtt_client.publish(mqtt_base_topic, buffer, true);
+  bool pub_result = mqtt_client.publish(mqtt_base_topic, buffer, true);
+  if (!pub_result) {
+    Serial.print("[MQTT ERROR] Failed to publish to: ");
+    Serial.print(mqtt_base_topic);
+    Serial.print(", State: ");
+    Serial.println(mqtt_client.state());
+  }
   
   // On state change, add state_change flag for Zigbee2MQTT to handle properly
   static bool last_presence = false;
@@ -221,43 +276,58 @@ void publish_sensor_data(bool force) {
 }
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  
   // Convert payload to string for debugging
   String message;
   for (unsigned int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
+  
+  Serial.print("[MQTT IN] Topic: ");
+  Serial.print(topic);
+  Serial.print(" Payload: ");
   Serial.println(message);
   
   // Check if this is a config topic message
   if (String(topic) == String(mqtt_config_topic)) {
+    Serial.println("[MQTT PROCESSING] Config message received");
+    
     // Parse JSON configuration
     StaticJsonDocument<200> doc;
     DeserializationError error = deserializeJson(doc, payload, length);
     
     if (error) {
-      Serial.print("deserializeJson() failed: ");
+      Serial.print("[MQTT ERROR] JSON parsing failed: ");
       Serial.println(error.c_str());
       return;
     }
+    
+    // Debug: Print parsed config
+    Serial.print("[MQTT CONFIG] Parsed configuration: ");
+    serializeJson(doc, Serial);
+    Serial.println();
     
     // Handle configuration changes
     handle_config_message(doc);
   }
   // Check if this is a get request (Z2M uses /get topic for retrieving values)
   else if (String(topic) == String(MQTT_GET_TOPIC)) {
+    Serial.println("[MQTT PROCESSING] Get request received, publishing current state");
     // Immediately publish current state in response to a get request
     publish_sensor_data(true);
   }
   // Check if this is a bridge request to our device
   else if (String(topic).startsWith(MQTT_Z2M_BRIDGE_TOPIC)) {
+    Serial.println("[MQTT PROCESSING] Bridge message received");
+    
     if (message.indexOf("\"devices\":") >= 0) {
+      Serial.println("[MQTT BRIDGE] Devices list request detected, republishing device info");
       // This is likely a devices list request, re-publish our device info
       publish_device_discovery();
+    } else {
+      Serial.println("[MQTT BRIDGE] Unhandled bridge message type");
     }
+  } else {
+    Serial.println("[MQTT WARNING] Message received on unexpected topic");
   }
 }
 
@@ -340,16 +410,25 @@ void publish_device_discovery() {
   if (json_length > 0 && json_length < sizeof(buffer)) {
     // Publish device definition to Zigbee2MQTT devices topic
     String device_topic = String(MQTT_Z2M_DEVICES_TOPIC) + "/" + MQTT_DEVICE_ID;
+    
+    // Debug - Log MQTT device discovery publish
+    Serial.print("[MQTT DISCOVERY] Topic: ");
+    Serial.print(device_topic);
+    Serial.print(" Payload Length: ");
+    Serial.println(json_length);
+    
     bool pub_result = mqtt_client.publish(device_topic.c_str(), buffer, true);
     
     if (pub_result) {
-      Serial.println("Published device discovery information");
+      Serial.println("[MQTT DISCOVERY] Successfully published device information");
     } else {
-      Serial.print("Failed to publish device discovery information. Length: ");
-      Serial.println(json_length);
+      Serial.print("[MQTT ERROR] Failed to publish device discovery information. Length: ");
+      Serial.print(json_length);
+      Serial.print(", State: ");
+      Serial.println(mqtt_client.state());
     }
   } else {
-    Serial.print("JSON serialization failed or buffer too small. Length: ");
+    Serial.print("[MQTT ERROR] JSON serialization failed or buffer too small. Length: ");
     Serial.println(json_length);
     
     // Try with a smaller payload if the full one is too large
@@ -360,9 +439,12 @@ void publish_device_discovery() {
     char small_buffer[256];
     size_t small_length = serializeJson(minimal_doc, small_buffer, sizeof(small_buffer));
     
+    Serial.print("[MQTT RECOVERY] Attempting smaller payload with length: ");
+    Serial.println(small_length);
+    
     String device_topic = String(MQTT_Z2M_DEVICES_TOPIC) + "/" + MQTT_DEVICE_ID;
     bool pub_result = mqtt_client.publish(device_topic.c_str(), small_buffer, true);
-    Serial.print("Fallback publish result: ");
+    Serial.print("[MQTT RECOVERY] Fallback publish result: ");
     Serial.println(pub_result ? "OK" : "Failed");
   }
 }
@@ -370,32 +452,61 @@ void publish_device_discovery() {
 void handle_config_message(const JsonDocument& doc) {
   bool config_changed = false;
   
+  Serial.println("[CONFIG] Processing configuration message");
+  
   // Check if configuration contains detection_distance
   if (doc.containsKey("detection_distance")) {
     float new_distance = doc["detection_distance"];
-    if (new_distance >= 0.5 && new_distance <= 6.0 && new_distance != detection_distance) {
-      detection_distance = new_distance;
-      radar.set_detection_distance(detection_distance);
-      config_changed = true;
-      Serial.print("Detection distance updated to: ");
-      Serial.println(detection_distance);
+    Serial.print("[CONFIG] Detection distance in message: ");
+    Serial.print(new_distance);
+    Serial.print(", current: ");
+    Serial.println(detection_distance);
+    
+    if (new_distance >= 0.5 && new_distance <= 6.0) {
+      if (new_distance != detection_distance) {
+        detection_distance = new_distance;
+        radar.set_detection_distance(detection_distance);
+        config_changed = true;
+        Serial.print("[CONFIG UPDATED] Detection distance set to: ");
+        Serial.println(detection_distance);
+      } else {
+        Serial.println("[CONFIG] Detection distance unchanged (same value)");
+      }
+    } else {
+      Serial.print("[CONFIG ERROR] Detection distance out of range (0.5-6.0m): ");
+      Serial.println(new_distance);
     }
   }
   
   // Check if configuration contains sensitivity
   if (doc.containsKey("sensitivity")) {
     int new_sensitivity = doc["sensitivity"];
-    if (new_sensitivity >= 1 && new_sensitivity <= 10 && new_sensitivity != sensitivity) {
-      sensitivity = new_sensitivity;
-      radar.set_sensitivity(sensitivity);
-      config_changed = true;
-      Serial.print("Sensitivity updated to: ");
-      Serial.println(sensitivity);
+    Serial.print("[CONFIG] Sensitivity in message: ");
+    Serial.print(new_sensitivity);
+    Serial.print(", current: ");
+    Serial.println(sensitivity);
+    
+    if (new_sensitivity >= 1 && new_sensitivity <= 10) {
+      if (new_sensitivity != sensitivity) {
+        sensitivity = new_sensitivity;
+        radar.set_sensitivity(sensitivity);
+        config_changed = true;
+        Serial.print("[CONFIG UPDATED] Sensitivity set to: ");
+        Serial.println(sensitivity);
+      } else {
+        Serial.println("[CONFIG] Sensitivity unchanged (same value)");
+      }
+    } else {
+      Serial.print("[CONFIG ERROR] Sensitivity out of range (1-10): ");
+      Serial.println(new_sensitivity);
     }
   }
   
   // Publish updated configuration if changed
   if (config_changed) {
+    Serial.println("[CONFIG] Configuration changed, publishing updated state");
     publish_sensor_data(true);
+  } else {
+    Serial.println("[CONFIG] No configuration changes applied");
   }
 }
