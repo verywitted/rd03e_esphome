@@ -3,6 +3,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include "rd03e_radar.h"
+#include "rd03e_config.h"
 #include "config.h"
 
 // WiFi credentials

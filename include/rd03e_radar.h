@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <HardwareSerial.h>
+#include "rd03e_config.h"
 
 class RD03ERadar {
 public:
@@ -25,23 +26,13 @@ public:
 private:
   // UART communication
   HardwareSerial *uart;
+
+  RD03EConfig *_config;
   
   // Buffer for receiving UART data
   static const uint8_t BUFFER_SIZE = 20;
   uint8_t buffer[BUFFER_SIZE];
   uint8_t buffer_index = 0;
-  
-  // Message frame details
-  static const uint8_t CONFIG_FRAME_HEADER_1 = 0xFA;
-  static const uint8_t CONFIG_FRAME_HEADER_2 = 0xFB;
-  static const uint8_t CONFIG_FRAME_HEADER_3 = 0xFC;
-  static const uint8_t CONFIG_FRAME_HEADER_4 = 0xFD;
-
-  static const uint8_t CONFIG_FRAME_FOOTER_1 = 0x01;
-  static const uint8_t CONFIG_FRAME_FOOTER_2 = 0x02;
-  static const uint8_t CONFIG_FRAME_FOOTER_3 = 0x03;
-  static const uint8_t CONFIG_FRAME_FOOTER_4 = 0x04;
-
   
   static const uint8_t DATA_FRAME_HEADER_1 = 0xAA;
   static const uint8_t DATA_FRAME_HEADER_2 = 0xAA;
@@ -68,4 +59,12 @@ private:
   void process_byte(uint8_t data);
   void process_frame();
   void send_config_command();
+  bool waitForAck(uint16_t cmdWord);
+  bool sendCommand(uint16_t cmdWord, const uint8_t* data, uint16_t dataLen);
+  void setConfig(const RD03EConfig& config);
+  RD03EConfig& getConfig();
+  bool applyConfig();
+  
+
+
 };

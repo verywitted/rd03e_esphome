@@ -1,13 +1,12 @@
 #include "rd03e_radar.h"
+//#include "rd03e_config.h"
+
+#include <iostream>     // std::cout
+#include <algorithm>    // std::copy
+#include <vector> 
 
 RD03ERadar::RD03ERadar() : uart(nullptr) {
 
-  // struct RadarConfig {
-  //     float detection_distance ,
-  //     float sensitivity,
-  //     float noise_threshold
-  // }
-  
   // Initialize variables
   buffer_index = 0;
   frame_started = false;
@@ -16,6 +15,7 @@ RD03ERadar::RD03ERadar() : uart(nullptr) {
   movement_detected = false;
   distance_m = 0.0;
   config_pending = true;
+  RD03EConfig = _config;  // Initialize the configuration object;
 }
 
 void RD03ERadar::begin(int rx_pin, int tx_pin, int baud_rate) {
@@ -36,7 +36,7 @@ void RD03ERadar::begin(int rx_pin, int tx_pin, int baud_rate) {
 void RD03ERadar::update() {
   // Send configuration if pending
   if (config_pending) {
-    //send_config_command();
+    send_config_command();
     config_pending = false;
   }
   
@@ -51,10 +51,11 @@ void RD03ERadar::update() {
   }
 }
 
-void RD03ERadar::set_detection_distance(float distance) {
+void RD03ERadar::set_detection_distance( distance) {
   if (distance >= 0.5 && distance <= 6.0) {
-    this->detection_distance = distance;
-    this->config_pending = true;
+    this->_config = {600, 30, 425, 30, 1000};
+    this->_config.modified.distanceSettings = true;
+  }
     Serial.print("Setting detection distance to: ");
     Serial.println(distance);
   }
@@ -139,60 +140,84 @@ void RD03ERadar::process_frame() {
     } 
 }
 
-void RD03ERadar::send_config_command() {
+void RD03ERadar::send_config_command(RD03EConfig& config) {
   if (!uart) return;
-  
-  uint8_t init_config[14]; 
-  // Header
-  init_config[0] = CONFIG_FRAME_HEADER_1;
-  init_config[1] = CONFIG_FRAME_HEADER_2;
-  init_config[2] = CONFIG_FRAME_HEADER_3;
-  init_config[3] = CONFIG_FRAME_HEADER_4;
-   
-  // Data length (4 bytes)
-  init_config[4] = 0x00;
-  init_config[5] = 0x04;
-
-  // Command word = Set Parameters
-  init_config[6] = 0x00;
-  init_config[7] = 0xFF;
-
-  //command value
-  init_config[8] = 0x00;
-  init_config[9] = 0x01;
-  
-  // Data length (8 bytes)
-  init_config[10] = CONFIG_FRAME_FOOTER_1;
-  init_config[11] = CONFIG_FRAME_FOOTER_2;
-  init_config[12] = CONFIG_FRAME_FOOTER_3;
-  init_config[13] = CONFIG_FRAME_FOOTER_4;
-
-  
-uint8_t end_config[11];
-
- // Header
- end_config[0] = CONFIG_FRAME_HEADER_1;
- end_config[1] = CONFIG_FRAME_HEADER_2;
- end_config[2] = CONFIG_FRAME_HEADER_3;
- end_config[3] = CONFIG_FRAME_HEADER_4;
-
-  // Data length (13 bytes)
-  end_config[4] = 0x00;
-  end_config[5] = 0x02;
-
-  // Command word = Set Parameters
-  end_config[6] = 0x00;
-  end_config[7] = 0xFE;
-
-
-  end_config[8] =  CONFIG_FRAME_FOOTER_1;                               // Parameter ID
-  end_config[9] =  CONFIG_FRAME_FOOTER_2;                                // Parameter value (continuous mode)
-  end_config[10] = CONFIG_FRAME_FOOTER_3;                               // Reserved
-  end_config[11] = CONFIG_FRAME_FOOTER_4;                               // Reserved
-
-  
-  // Send the command
-  uart->write(end_config, 13);
-  Serial.println("Sent configuration command to radar");
+  bool sendCommand(uint16_t cmdWord, const uint8_t* data, uint16_t dataLen) {
+    uint8_t header[] = {0xFD, 0xFC, 0xFB, 0xFA};
+    uint8_t footer[] = {0x04, 0x03, 0x02, 0x01};
+    uint16_t length = dataLen;
+    
+    uart->write(header, 4);
+    uart->write((uint8_t*)&length, 2);
+    uart->write((uint8_t*)&cmdWord, 2);
+    if (data != nullptr && dataLen > 0) {
+      uart->write(data, dataLen);
     }
+    uart->write(footer, 4);
+    
+    // Wait for and validate ACK...
+    return waitForAck(cmdWord);
+  }
   
+  // Wait for and validate ACK response
+  bool RD03ERadar::waitForAck(uint16_t cmdWord) {
+    // Implementation to read ACK and verify it matches expected format
+    // ...
+    return true;
+  }
+
+  void RD03ERadar::setConfig(const RD03EConfig& config) {
+    _config = config;
+  }
+  
+  // Get current configuration
+  RD03EConfig& RD03ERadar::getConfig() {
+    return _config;
+  }
+  
+  // Apply all modified configuration settings
+  bool RD03ERadar::applyConfig() {
+    // Enable configuration mode first
+    uint8_t enableData[] = {0x01, 0x00};
+    if (!sendCommand(0x00FF, enableData, sizeof(enableData))) {
+      return false;
+    }
+    
+    // Apply distance calibration if modified
+    if (_config.modified.distanceCalibration) {
+      uint8_t data[6];
+      uint16_t paramRef = static_cast<uint16_t>(ParamRef::DISTANCE_CALIBRATION);
+      memcpy(data, &paramRef, 2);
+      memcpy(data + 2, &_config.distanceCalibration, 4);
+      if (!sendCommand(0x0072, data, 6)) return false;
+    }
+    
+    // Apply distance settings if modified
+    if (_config.modified.distanceSettings) {
+      uint8_t data[32];
+      uint16_t paramRefs[] = {
+        static_cast<uint16_t>(ParamRef::MAX_MOVEMENT_DISTANCE),
+        static_cast<uint16_t>(ParamRef::MIN_MOVEMENT_DISTANCE),
+        static_cast<uint16_t>(ParamRef::MAX_MICRO_DISTANCE),
+        static_cast<uint16_t>(ParamRef::MIN_MICRO_DISTANCE),
+        static_cast<uint16_t>(ParamRef::UNMANNED_DURATION)
+      };
+      
+      uint32_t values[] = {
+        _config.distanceSettings.maxMovement,
+        _config.distanceSettings.minMovement,
+        _config.distanceSettings.maxMicroMotion,
+        _config.distanceSettings.minMicroMotion,
+        _config.distanceSettings.unmannedDuration
+      };
+      
+      int offset = 0;
+      for (int i = 0; i < 5; i++) {
+        memcpy(data + offset, &paramRefs[i], 2);
+        offset += 2;
+        memcpy(data + offset, &values[i], 4);
+        offset += 4;
+      }
+    }
+  }
+      
