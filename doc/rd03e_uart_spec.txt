@@ -1,0 +1,187 @@
+1. Distance Calibration Parameter Configuration Command (0x0072)
+Setting distance calibration parameter to 10 (as an int32 value):
+Send data:
+FD FC FB FA 08 00 72 00 00 00 0A 00 00 00 04 03 02 01
+Breaking this down:
+
+FD FC FB FA: Frame header
+08 00: Intra-frame data length (8 bytes)
+72 00: Command word (0x0072)
+00 00: Parameter reference (0x0000 = distance calibration parameter)
+0A 00 00 00: Parameter value (10 in little-endian int32 format)
+04 03 02 01: End of frame
+
+Success ACK:
+FD FC FB FA 04 00 72 01 01 00 00 00
+2. Maximum/Minimum Distance and Unmanned Duration Command (0x0067)
+Setting:
+
+Maximum movement distance: 600 cm (0x0258)
+Minimum movement distance: 40 cm (0x0028)
+Maximum micro-motion distance: 400 cm (0x0190)
+Minimum micro-motion distance: 35 cm (0x0023)
+Unmanned duration: 2 seconds (40 * 50ms = 0x0028)
+
+Send data:
+FD FC FB FA 20 00 67 00 00 00 58 02 00 00 01 00 28 00 00 00 02 00 90 01 00 00 03 00 23 00 00 00 04 00 28 00 00 00 04 03 02 01
+Breaking this down:
+
+FD FC FB FA: Frame header
+20 00: Intra-frame data length (32 bytes)
+67 00: Command word (0x0067)
+00 00: Max movement distance parameter number
+58 02 00 00: Value 600 (0x0258) in little-endian
+01 00: Min movement distance parameter number
+28 00 00 00: Value 40 (0x0028) in little-endian
+02 00: Max micro-motion distance parameter number
+90 01 00 00: Value 400 (0x0190) in little-endian
+03 00: Min micro-motion distance parameter number
+23 00 00 00: Value 35 (0x0023) in little-endian
+04 00: Unmanned duration parameter number
+28 00 00 00: Value 40 (0x0028) in little-endian
+04 03 02 01: End of frame
+
+Success ACK:
+FD FC FB FA 04 00 67 01 01 00 04 03 02 01
+3. Noise Floor Parameter Configuration Command (0x0068)
+Setting:
+
+Proximal motion noise coefficient: 25.0 (0x41C80000 in IEEE 754 float)
+Distal motion noise coefficient: 5.0 (0x40A00000 in IEEE 754 float)
+Proximal micro-motion noise coefficient: 30.0 (0x41F00000 in IEEE 754 float)
+Distal micro-motion noise coefficient: 8.0 (0x41000000 in IEEE 754 float)
+
+Send data:
+FD FC FB FA 18 00 68 00 00 00 00 00 C8 41 01 00 00 00 A0 40 02 00 00 00 F0 41 03 00 00 00 00 41 04 03 02 01
+Breaking this down:
+
+FD FC FB FA: Frame header
+18 00: Intra-frame data length (24 bytes)
+68 00: Command word (0x0068)
+00 00: Proximal motion noise parameter
+00 00 C8 41: Float value 25.0 in little-endian
+01 00: Distal motion noise parameter
+00 00 A0 40: Float value 5.0 in little-endian
+02 00: Proximal micro-motion noise parameter
+00 00 F0 41: Float value 30.0 in little-endian
+03 00: Distal micro-motion noise parameter
+00 00 00 41: Float value 8.0 in little-endian
+04 03 02 01: End of frame
+
+Success ACK:
+FD FC FB FA 04 00 68 01 01 00 04 03 02 01
+4. Clutter Suppression Coefficient Configuration Command (0x0069)
+Setting:
+
+Movement branch clutter suppression: 3
+Micro-motion branch clutter suppression: 9
+
+Send data:
+FD FC FB FA 0E 00 69 00 00 00 03 00 00 00 01 00 09 00 00 00 04 03 02 01
+Breaking this down:
+
+FD FC FB FA: Frame header
+0E 00: Intra-frame data length (14 bytes)
+69 00: Command word (0x0069)
+00 00: Movement branch parameter number
+03 00 00 00: Value 3 in little-endian
+01 00: Micro-motion branch parameter number
+09 00 00 00: Value 9 in little-endian
+04 03 02 01: End of frame
+
+Success ACK:
+FD FC FB FA 04 00 69 01 01 00 04 03 02 01
+5. FRAME Sliding Window Length Parameter Configuration Command (0x0070)
+Setting:
+
+Motion branch FRAME window length: 7
+Fretting branch FRAME window length: 12
+
+Send data:
+FD FC FB FA 0E 00 70 00 00 00 07 00 00 00 01 00 0C 00 00 00 04 03 02 01
+Breaking this down:
+
+FD FC FB FA: Frame header
+0E 00: Intra-frame data length (14 bytes)
+70 00: Command word (0x0070)
+00 00: Motion branch parameter number
+07 00 00 00: Value 7 in little-endian
+01 00: Fretting branch parameter number
+0C 00 00 00: Value 12 in little-endian
+04 03 02 01: End of frame
+
+Success ACK:
+FD FC FB FA 04 00 70 01 01 00 04 03 02 01
+6. Alpha-Beta Filter Coefficient Configuration Command (0x0071)
+Setting:
+
+α-β filter coefficient 1: 0.6 (0x3F19999A in IEEE 754 float)
+α-β filter coefficient 2: 0.4 (0x3ECCCCCD in IEEE 754 float)
+α-β filter coefficient 3: 0.8 (0x3F4CCCCD in IEEE 754 float)
+α-β filter coefficient 4: 0.2 (0x3E4CCCCD in IEEE 754 float)
+
+Send data:
+FD FC FB FA 1A 00 71 00 00 9A 99 19 3F 01 00 CD CC CC 3E 02 00 CD CC 4C 3F 03 00 CD CC 4C 3E 04 03 02 01
+Breaking this down:
+
+FD FC FB FA: Frame header
+1A 00: Intra-frame data length (26 bytes)
+71 00: Command word (0x0071)
+00 00: Filter coefficient 1 parameter number
+9A 99 19 3F: Float value 0.6 in little-endian
+01 00: Filter coefficient 2 parameter number
+CD CC CC 3E: Float value 0.4 in little-endian
+02 00: Filter coefficient 3 parameter number
+CD CC 4C 3F: Float value 0.8 in little-endian
+03 00: Filter coefficient 4 parameter number
+CD CC 4C 3E: Float value 0.2 in little-endian
+04 03 02 01: End of frame
+
+Success ACK:
+FD FC FB FA 04 00 71 01 01 00 04 03 02 01
+
+
+
+Here are the valid ranges for all configurable parameters mentioned in the document:
+1. Distance Calibration Parameter (0x0072)
+
+Type: int32
+Range: Not explicitly stated in the document
+
+2. Maximum/Minimum Distance and Unmanned Duration (0x0067)
+
+Maximum movement distance (0x0000): 30-717 cm
+Minimum movement distance (0x0001): Not explicitly stated, but likely 30 cm minimum
+Maximum micro-motion/fretting distance (0x0002): 30-425 cm
+Minimum micro-motion/fretting distance (0x0003): Not explicitly stated, but likely 30 cm minimum
+Unmanned duration (0x0004): 0-65535 (unit: 50ms) - This translates to 0-3,276.75 seconds
+
+3. Noise Floor Parameters (0x0068)
+
+All noise coefficients (proximal/distal, motion/micro-motion)
+Type: float
+Range: -3.40E+38 to +3.40E+38
+Effect: Increasing coefficient makes bottom noise larger, decreasing makes it smaller
+
+4. Clutter Suppression Coefficients (0x0069)
+
+Moving branch and micro-motion branch clutter suppression
+Type: uint32_t
+Range: 0-255
+Effect: Higher values = weaker filtering of static background, lower values = stronger filtering
+
+5. FRAME Sliding Window Length (0x0070)
+
+Motion branch and fretting branch FRAME window length
+Type: uint32_t
+Range: 0-255
+Default values: Motion = 5, Micro-motion = 10
+Note: The document states that the maximum values can be changed in firmware, but cannot exceed 255
+
+6. Alpha-Beta Filter Coefficients (0x0071)
+
+All alpha-beta filter coefficients (1-4)
+Type: float
+Range: -3.40E+38 to +3.40E+38
+Effect: Larger α and β parameters = faster filtering but more noise; smaller values = smoother filtering but worse dynamic response and longer delay
+
