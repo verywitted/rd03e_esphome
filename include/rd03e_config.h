@@ -1,10 +1,9 @@
-public:
   enum class ParamRef : uint16_t {
     DISTANCE_CALIBRATION = 0x0000,
-    MAX_MOVEMENT_DISTANCE = 0x0000,
-    MIN_MOVEMENT_DISTANCE = 0x0001,
-    MAX_MICRO_DISTANCE = 0x0002,
-    MIN_MICRO_DISTANCE = 0x0003,
+    MAX_MACRO_MOVEMENT_DISTANCE = 0x0000,
+    MIN_MACRO_MOVEMENT_DISTANCE = 0x0001,
+    MAX_MICRO_MOVEMENT_DISTANCE = 0x0002,
+    MIN_MICRO_MOVEMENT_DISTANCE = 0x0003,
     UNMANNED_DURATION = 0x0004,
     PROXIMAL_MOTION_NOISE = 0x0000,
     DISTAL_MOTION_NOISE = 0x0001,
@@ -31,21 +30,23 @@ public:
         bool frameWindowParams: 1;
         bool alphaParams: 1;
       } modified = {0};
+
+
       
       // Distance calibration parameter (0x0072)
       int32_t distanceCalibration = 0;
       
       // Distance settings (0x0067)
       struct {
-        uint32_t maxMovement = 717;      // 30-717 cm
-        uint32_t minMovement = 30;       // Minimum value
-        uint32_t maxMicroMotion = 425;   // 30-425 cm
-        uint32_t minMicroMotion = 30;    // Minimum value
-        uint32_t unmannedDuration = 20;  // 0-65535 (in units of 50ms)
+        uint32_t maxMacroMovement = 500;      // 30-717 cm
+        uint32_t minMacroMovement = 30;       // Minimum value
+        uint32_t maxMicroMotion = 300;   // 30-425 cm
+        uint32_t minMicroMotion = 10;    // Minimum value
+        uint32_t unmannedDuration = 100;  // 0-65535 (in units of 50ms)
       } distanceSettings;
       
       // Noise parameters (0x0068)
-      struct {
+       struct {
         float proximalMotion = 40.0f;
         float distalMotion = 6.0f;
         float proximalMicro = 40.0f;

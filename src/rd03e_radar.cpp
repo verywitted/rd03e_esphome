@@ -4,6 +4,7 @@
 #include <iostream>     // std::cout
 #include <algorithm>    // std::copy
 #include <vector> 
+using namespace std;
 
 RD03ERadar::RD03ERadar() : uart(nullptr) {
 
@@ -15,7 +16,7 @@ RD03ERadar::RD03ERadar() : uart(nullptr) {
   movement_detected = false;
   distance_m = 0.0;
   config_pending = true;
-  RD03EConfig = _config;  // Initialize the configuration object;
+  RD03EConfig* _config;  // Initialize the configuration object;
 }
 
 void RD03ERadar::begin(int rx_pin, int tx_pin, int baud_rate) {
@@ -36,14 +37,13 @@ void RD03ERadar::begin(int rx_pin, int tx_pin, int baud_rate) {
 void RD03ERadar::update() {
   // Send configuration if pending
   if (config_pending) {
-    send_config_command();
+    this->applyConfig();
     config_pending = false;
   }
   
   // Process any available data from the radar
   while (uart && uart->available() > 0) {
     uint8_t data = uart->read();
-    if (BYPASS_MODE)
     if (data == -1){
       Serial.println("Failed to read from uart interface."); // Skip invalid data
     }
@@ -51,24 +51,34 @@ void RD03ERadar::update() {
   }
 }
 
-void RD03ERadar::set_detection_distance( distance) {
+void RD03ERadar::set_detection_distance(float distance) {
   if (distance >= 0.5 && distance <= 6.0) {
-    this->_config = {600, 30, 425, 30, 1000};
-    this->_config.modified.distanceSettings = true;
-  }
+    this->_config->distanceSettings.maxMacroMovement = distance;
+    this->_config->modified.distanceSettings = true;
+    config_pending = true;
     Serial.print("Setting detection distance to: ");
     Serial.println(distance);
   }
+  else {
+    Serial.println("Invalid distance value. Distance must be between 0.5 and 6.0 meters.");
+  }
 }
 
-void RD03ERadar::set_sensitivity(uint8_t sensitivity) {
-  if (sensitivity >= 1 && sensitivity <= 10) {
-    this->sensitivity = sensitivity;
+void RD03ERadar::set_sensitivity(float proximalMotion,
+  float distalMotion,
+  float proximalMicro,
+  float distalMicro) 
+  {
+    this->_config->noiseParams.proximalMotion = proximalMotion;
+    this->_config->noiseParams.distalMotion = distalMotion;
+    this->_config->noiseParams.proximalMicro = proximalMicro;
+    this->_config->noiseParams.distalMicro = distalMicro;
+    this->_config->modified.noiseParams = true;
     this->config_pending = true;
     Serial.print("Setting sensitivity to: ");
     Serial.println(sensitivity);
   }
-}
+
 
 bool RD03ERadar::is_presence_detected() const {
   return presence_detected;
@@ -93,16 +103,13 @@ void RD03ERadar::process_byte(uint8_t data) {
           buffer_index = 1;
         }
       }
-     else {
-
-           // If we have received a complete frame
-      if (buffer_index == 6 && data == 0x55 && buffer[5] == 0x55) {
+     else if (buffer_index == 6 && data == 0x55 && buffer[5] == 0x55) {
           buffer[buffer_index] = data;
           buffer_index = 0;
           process_frame();
         }
       else {
-    // Add byte to buffer
+            // Add byte to buffer
           if (buffer_index > 1) {
             buffer[buffer_index] = data;
             buffer_index++;      
@@ -114,9 +121,14 @@ void RD03ERadar::process_byte(uint8_t data) {
     if (buffer_index >= BUFFER_SIZE) {
       buffer_index = 0;
     }
-  }
-}
+    uint8_t header[] = {buffer[0], buffer[1], buffer[2], buffer[3]};
+    if (buffer_index == 4 && header == ACK_FRAME_HEADER)
+    {
+      // Acknowledgment frame received
+      Serial.println("Acknowledgment frame received");
+    }
 
+  }
 
 void RD03ERadar::process_frame() {
   // Verify the frame with checksum
@@ -139,10 +151,7 @@ void RD03ERadar::process_frame() {
     Serial.printf("Config Acknowledgment received\n");
     } 
 }
-
-void RD03ERadar::send_config_command(RD03EConfig& config) {
-  if (!uart) return;
-  bool sendCommand(uint16_t cmdWord, const uint8_t* data, uint16_t dataLen) {
+  bool RD03ERadar::sendCommand(uint16_t cmdWord, const uint8_t* data, uint16_t dataLen) {
     uint8_t header[] = {0xFD, 0xFC, 0xFB, 0xFA};
     uint8_t footer[] = {0x04, 0x03, 0x02, 0x01};
     uint16_t length = dataLen;
@@ -154,24 +163,19 @@ void RD03ERadar::send_config_command(RD03EConfig& config) {
       uart->write(data, dataLen);
     }
     uart->write(footer, 4);
-    
-    // Wait for and validate ACK...
-    return waitForAck(cmdWord);
   }
   
   // Wait for and validate ACK response
   bool RD03ERadar::waitForAck(uint16_t cmdWord) {
-    // Implementation to read ACK and verify it matches expected format
-    // ...
     return true;
   }
 
-  void RD03ERadar::setConfig(const RD03EConfig& config) {
-    _config = config;
+  void RD03ERadar::setConfig(RD03EConfig* config) {
+     _config = config;
   }
   
   // Get current configuration
-  RD03EConfig& RD03ERadar::getConfig() {
+  RD03EConfig RD03ERadar::getConfig() {
     return _config;
   }
   
@@ -179,36 +183,33 @@ void RD03ERadar::send_config_command(RD03EConfig& config) {
   bool RD03ERadar::applyConfig() {
     // Enable configuration mode first
     uint8_t enableData[] = {0x01, 0x00};
-    if (!sendCommand(0x00FF, enableData, sizeof(enableData))) {
+    if (!sendCommand(0x00FF, enableData, 2)) {
       return false;
     }
     
     // Apply distance calibration if modified
-    if (_config.modified.distanceCalibration) {
-      uint8_t data[6];
+    if (_config.modified.distanceSettings) {
+      uint8_t data[6]
       uint16_t paramRef = static_cast<uint16_t>(ParamRef::DISTANCE_CALIBRATION);
       memcpy(data, &paramRef, 2);
-      memcpy(data + 2, &_config.distanceCalibration, 4);
+      memcpy(data + 2, &_config->distanceCalibration, 4);
       if (!sendCommand(0x0072, data, 6)) return false;
-    }
     
-    // Apply distance settings if modified
-    if (_config.modified.distanceSettings) {
       uint8_t data[32];
       uint16_t paramRefs[] = {
-        static_cast<uint16_t>(ParamRef::MAX_MOVEMENT_DISTANCE),
-        static_cast<uint16_t>(ParamRef::MIN_MOVEMENT_DISTANCE),
-        static_cast<uint16_t>(ParamRef::MAX_MICRO_DISTANCE),
-        static_cast<uint16_t>(ParamRef::MIN_MICRO_DISTANCE),
+        static_cast<uint16_t>(ParamRef::MAX_MACRO_MOVEMENT_DISTANCE),
+        static_cast<uint16_t>(ParamRef::MIN_MACRO_MOVEMENT_DISTANCE),
+        static_cast<uint16_t>(ParamRef::MAX_MICRO_MOVEMENT_DISTANCE),
+        static_cast<uint16_t>(ParamRef::MIN_MICRO_MOVEMENT_DISTANCE),
         static_cast<uint16_t>(ParamRef::UNMANNED_DURATION)
       };
       
       uint32_t values[] = {
-        _config.distanceSettings.maxMovement,
-        _config.distanceSettings.minMovement,
-        _config.distanceSettings.maxMicroMotion,
-        _config.distanceSettings.minMicroMotion,
-        _config.distanceSettings.unmannedDuration
+        _config->distanceSettings.maxMacroMovement,
+        _config->distanceSettings.minMacroMovement,
+        _config->distanceSettings.maxMicroMotion,
+        _config->distanceSettings.minMicroMotion,
+        _config->distanceSettings.unmannedDuration
       };
       
       int offset = 0;
@@ -218,6 +219,8 @@ void RD03ERadar::send_config_command(RD03EConfig& config) {
         memcpy(data + offset, &values[i], 4);
         offset += 4;
       }
+      
+      if (!sendCommand(0x0067, data, offset)) return false;
     }
   }
       

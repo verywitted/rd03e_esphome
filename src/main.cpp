@@ -3,8 +3,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include "rd03e_radar.h"
-#include "rd03e_config.h"
-#include "config.h"
+#include "esp32_config.h"
 
 // WiFi credentials
 const char* ssid = WIFI_SSID;
@@ -63,8 +62,8 @@ void setup() {
   // Initialize radar sensor
   radar.begin(RX_PIN, TX_PIN);
   radar.set_detection_distance(detection_distance);
-  radar.set_sensitivity(sensitivity);
-  
+  radar.set_sensitivity(40.0f, 6.0f, 40.0f, 9.0f);
+
   // Connect to WiFi
   setup_wifi();
   
@@ -95,9 +94,7 @@ void loop() {
   float new_distance = radar.get_distance();
   
   // Check if states have changed
-  bool state_changed = (new_presence != presence_state) || 
-                       (new_movement != movement_state) ||
-                       (abs(new_distance - distance_value) > 0.1); // 10cm threshold for distance change
+  bool state_changed = // 10cm threshold for distance change
   
   // Update states
   presence_state = new_presence;

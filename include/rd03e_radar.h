@@ -16,8 +16,8 @@ public:
   
   // Configuration methods
   void set_detection_distance(float distance);
-  void set_sensitivity(uint8_t sensitivity);
-  
+  void set_sensitivity(float proximalMotion, float distalMotion, float proximalMicro, float distalMicro);
+
   // State getter methods
   bool is_presence_detected() const;
   bool is_movement_detected() const;
@@ -39,8 +39,10 @@ private:
 
   static const uint8_t DATA_FRAME_FOOTER_1 = 0x55;
   static const uint8_t DATA_FRAME_FOOTER_2 = 0x55;
-  static const uint8_t DATA_FRAME_LENGTH = 7;  
+  static const uint8_t DATA_FRAME_LENGTH = 7;
 
+  static constexpr uint8_t ACK_FRAME_HEADER[4] = {0xFD,0xFC,0xFB,0xFA};
+  static constexpr uint8_t ACK_FRAME_FOOTER[4] = {0x04,0x03,0x02,0x01};
   // Status tracking
   bool frame_started = false;
   bool waiting_for_header2 = false;
@@ -65,6 +67,4 @@ private:
   RD03EConfig& getConfig();
   bool applyConfig();
   
-
-
 };
