@@ -178,9 +178,6 @@ void reconnect_mqtt() {
       Serial.println(MQTT_GET_TOPIC);
       mqtt_client.subscribe(MQTT_GET_TOPIC);
       
-      Serial.print("[MQTT SUB] ");
-      Serial.println(MQTT_Z2M_BRIDGE_TOPIC);
-      mqtt_client.subscribe(MQTT_Z2M_BRIDGE_TOPIC);
       
       // Publish availability for Zigbee2MQTT
       Serial.print("[MQTT OUT] Topic: ");
@@ -322,18 +319,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     // Immediately publish current state in response to a get request
     publish_sensor_data(true);
   }
-  // Check if this is a bridge request to our device
-  else if (String(topic).startsWith(MQTT_Z2M_BRIDGE_TOPIC)) {
-    Serial.println("[MQTT PROCESSING] Bridge message received");
-    
-    if (message.indexOf("\"devices\":") >= 0) {
-      Serial.println("[MQTT BRIDGE] Devices list request detected, republishing device info");
-      // This is likely a devices list request, re-publish our device info
-      publish_device_discovery();
-    } else {
-      Serial.println("[MQTT BRIDGE] Unhandled bridge message type");
-    }
-  } else {
+   else {
     Serial.println("[MQTT WARNING] Message received on unexpected topic");
   }
 }
@@ -342,7 +328,7 @@ void publish_device_discovery() {
   // Create a consistent device info object for all sensors
   StaticJsonDocument<200> device_doc;
   JsonObject device_info = device_doc.to<JsonObject>();
-  device_info["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  device_info["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
   device_info["name"] = "RD03E Radar Sensor";
   device_info["model"] = "RD03E";
   device_info["manufacturer"] = "ai-thinker";
@@ -360,11 +346,11 @@ void publish_device_discovery() {
   presence_doc["payload_on"] = "true";
   presence_doc["payload_off"] = "false";
   presence_doc["value_template"] = "{{ value }}";
-  presence_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_presence_" + String(ESP.getChipId(), HEX);
+  presence_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_presence_" + String(ESP.getChipModel(), HEX);
   
   // Add the device info
   JsonObject presence_device = presence_doc.createNestedObject("device");
-  presence_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  presence_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
   presence_device["name"] = "RD03E Radar Sensor";
   presence_device["model"] = "RD03E";
   presence_device["manufacturer"] = "ai-thinker";
@@ -385,11 +371,11 @@ void publish_device_discovery() {
   movement_doc["payload_on"] = "true";
   movement_doc["payload_off"] = "false";
   movement_doc["value_template"] = "{{ value }}";
-  movement_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_movement_" + String(ESP.getChipId(), HEX);
+  movement_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_movement_" + String(ESP.getChipModel(), HEX);
   
   // Add the device info
   JsonObject movement_device = movement_doc.createNestedObject("device");
-  movement_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  movement_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
   movement_device["name"] = "RD03E Radar Sensor";
   movement_device["model"] = "RD03E";
   movement_device["manufacturer"] = "ai-thinker";
@@ -409,11 +395,11 @@ void publish_device_discovery() {
   distance_doc["availability_topic"] = MQTT_STATUS_TOPIC;
   distance_doc["unit_of_measurement"] = "m";
   distance_doc["value_template"] = "{{ value }}";
-  distance_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_distance_" + String(ESP.getChipId(), HEX);
+  distance_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_distance_" + String(ESP.getChipModel(), HEX);
   
   // Add the device info
   JsonObject distance_device = distance_doc.createNestedObject("device");
-  distance_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  distance_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
   distance_device["name"] = "RD03E Radar Sensor";
   distance_device["model"] = "RD03E";
   distance_device["manufacturer"] = "ai-thinker";
@@ -436,11 +422,11 @@ void publish_device_discovery() {
   detection_distance_doc["min"] = 0.5;
   detection_distance_doc["max"] = 6.0;
   detection_distance_doc["step"] = 0.1;
-  detection_distance_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_detection_distance_" + String(ESP.getChipId(), HEX);
+  detection_distance_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_detection_distance_" + String(ESP.getChipModel(), HEX);
   
   // Add the device info
   JsonObject detection_distance_device = detection_distance_doc.createNestedObject("device");
-  detection_distance_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  detection_distance_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
   detection_distance_device["name"] = "RD03E Radar Sensor";
   detection_distance_device["model"] = "RD03E";
   detection_distance_device["manufacturer"] = "ai-thinker";
@@ -462,11 +448,11 @@ void publish_device_discovery() {
   sensitivity_doc["min"] = 1;
   sensitivity_doc["max"] = 10;
   sensitivity_doc["step"] = 1;
-  sensitivity_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_sensitivity_" + String(ESP.getChipId(), HEX);
+  sensitivity_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_sensitivity_" + String(ESP.getChipModel(), HEX);
   
   // Add the device info
   JsonObject sensitivity_device = sensitivity_doc.createNestedObject("device");
-  sensitivity_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  sensitivity_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
   sensitivity_device["name"] = "RD03E Radar Sensor";
   sensitivity_device["model"] = "RD03E";
   sensitivity_device["manufacturer"] = "ai-thinker";

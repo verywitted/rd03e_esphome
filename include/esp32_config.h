@@ -17,7 +17,7 @@
 #define MQTT_DISCOVERY_PREFIX "homeassistant"
 #define MQTT_DEVICE_ID "rd03e_radar"
 #define MQTT_UNIQUE_ID "RD03E"
-#define MQTT_NODE_ID ESP.getChipId()
+#define MQTT_NODE_ID ESP.getChipModel();
 
 // Device topic structure for state updates
 #define MQTT_BASE_TOPIC "rd03e_radar"
