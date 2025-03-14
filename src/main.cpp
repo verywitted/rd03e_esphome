@@ -94,7 +94,9 @@ void loop() {
   float new_distance = radar.get_distance();
   
   // Check if states have changed
-  bool state_changed = // 10cm threshold for distance change
+  bool state_changed = (new_presence != presence_state) || 
+                      (new_movement != movement_state) || 
+                      (abs(new_distance - distance_value) > 0.1); // 10cm threshold for distance change
   
   // Update states
   presence_state = new_presence;
@@ -233,43 +235,50 @@ void reconnect_mqtt() {
 void publish_sensor_data(bool force) {
   if (!mqtt_client.connected() && !force) return;
   
-  // Create JSON document for Zigbee2MQTT-compatible sensor data
-  StaticJsonDocument<200> doc;
+  // Get current values
+  char presence_str[6];
+  char movement_str[6];
+  char distance_str[10];
+  char detection_distance_str[10];
+  char sensitivity_str[4];
   
-  // Standard Z2MQTT format
-  doc["presence"] = presence_state;
-  doc["movement"] = movement_state;
-  doc["distance"] = distance_value;
-  doc["detection_distance"] = detection_distance;
-  doc["sensitivity"] = sensitivity;
-  doc["linkquality"] = (int)(WiFi.RSSI() + 100); // Convert RSSI to linkquality (0-100)
+  // Convert boolean and float values to strings
+  strcpy(presence_str, presence_state ? "true" : "false");
+  strcpy(movement_str, movement_state ? "true" : "false");
+  dtostrf(distance_value, 4, 2, distance_str);
+  dtostrf(detection_distance, 4, 2, detection_distance_str);
+  itoa(sensitivity, sensitivity_str, 10);
   
-  char buffer[200];
-  serializeJson(doc, buffer);
+  // Publish individual states
+  bool pub_presence = mqtt_client.publish(MQTT_PRESENCE_TOPIC, presence_str, true);
+  bool pub_movement = mqtt_client.publish(MQTT_MOVEMENT_TOPIC, movement_str, true);
+  bool pub_distance = mqtt_client.publish(MQTT_DISTANCE_TOPIC, distance_str, true);
+  bool pub_detection_distance = mqtt_client.publish((MQTT_BASE_TOPIC + String("/detection_distance/state")).c_str(), detection_distance_str, true);
+  bool pub_sensitivity = mqtt_client.publish((MQTT_BASE_TOPIC + String("/sensitivity/state")).c_str(), sensitivity_str, true);
   
-  // Debug - Log MQTT publish
-  Serial.print("[MQTT OUT] Topic: ");
-  Serial.print(mqtt_base_topic);
-  Serial.print(" Payload: ");
-  Serial.println(buffer);
-  
-  // Publish to main topic in Zigbee2MQTT format
-  bool pub_result = mqtt_client.publish(mqtt_base_topic, buffer, true);
-  if (!pub_result) {
-    Serial.print("[MQTT ERROR] Failed to publish to: ");
-    Serial.print(mqtt_base_topic);
-    Serial.print(", State: ");
-    Serial.println(mqtt_client.state());
-  }
-  
-  // On state change, add state_change flag for Zigbee2MQTT to handle properly
+  // Log the publish results
+  Serial.printf("[MQTT PUBLISH] Presence: %s, Movement: %s, Distance: %s, DetectionDist: %s, Sensitivity: %s\n",
+               pub_presence ? "OK" : "Fail",
+               pub_movement ? "OK" : "Fail",
+               pub_distance ? "OK" : "Fail",
+               pub_detection_distance ? "OK" : "Fail",
+               pub_sensitivity ? "OK" : "Fail");
+               
+  // Track state changes
   static bool last_presence = false;
   static bool last_movement = false;
+  static float last_distance = 0.0;
   
-  if (last_presence != presence_state || last_movement != movement_state) {
-    Serial.println("State changed, sending detailed state update");
+  if (last_presence != presence_state || last_movement != movement_state || 
+      fabs(last_distance - distance_value) >= 0.1) {
+    Serial.println("[MQTT] State changed significantly, logging details:");
+    Serial.printf("  Presence: %s -> %s\n", last_presence ? "true" : "false", presence_state ? "true" : "false");
+    Serial.printf("  Movement: %s -> %s\n", last_movement ? "true" : "false", movement_state ? "true" : "false");
+    Serial.printf("  Distance: %.2f -> %.2f\n", last_distance, distance_value);
+    
     last_presence = presence_state;
     last_movement = movement_state;
+    last_distance = distance_value;
   }
 }
 
@@ -330,122 +339,144 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void publish_device_discovery() {
-  // Publish device information to Zigbee2MQTT
-  StaticJsonDocument<768> device_doc; // Increased size to accommodate all device fields
-  
-  // Device definition information
-  device_doc["name"] = "rd03e_radar";
-  device_doc["description"] = "24GHz Radar Presence Sensor";
-  device_doc["model"] = "RD03E";
-  device_doc["vendor"] = "ai-thinker";
-  device_doc["supported"] = true;
-  device_doc["id"] = "30EFD30EF";
-  // Create exposes array to describe capabilities
-  JsonArray exposes = device_doc.createNestedArray("exposes");
-  
-  // Presence binary sensor
-  JsonObject presence = exposes.createNestedObject();
-  presence["type"] = "binary";
-  presence["name"] = "presence";
-  presence["property"] = "presence";
-  presence["access"] = 1; // Read-only: 1, Read/Write: 3
-  presence["value_on"] = true;
-  presence["value_off"] = false;
-  presence["description"] = "Indicates presence detection";
-  
-  // Movement binary sensor
-  JsonObject movement = exposes.createNestedObject();
-  movement["type"] = "binary";
-  movement["name"] = "movement";
-  movement["property"] = "movement";
-  movement["access"] = 1;
-  movement["value_on"] = true;
-  movement["value_off"] = false;
-  movement["description"] = "Indicates movement detection";
-  
-  // Distance sensor
-  JsonObject distance = exposes.createNestedObject();
-  distance["type"] = "numeric";
-  distance["name"] = "distance";
-  distance["property"] = "distance";
-  distance["access"] = 1;
-  distance["unit"] = "m";
-  distance["description"] = "Distance to detected object";
-  
-  // Detection distance setting
-  JsonObject detection_distance_setting = exposes.createNestedObject();
-  detection_distance_setting["type"] = "numeric";
-  detection_distance_setting["name"] = "detection_distance";
-  detection_distance_setting["property"] = "detection_distance";
-  detection_distance_setting["access"] = 3; // Read/Write
-  detection_distance_setting["unit"] = "m";
-  detection_distance_setting["min"] = 0.5;
-  detection_distance_setting["max"] = 6.0;
-  detection_distance_setting["description"] = "Detection distance setting";
-  
-  // Sensitivity setting
-  JsonObject sensitivity_setting = exposes.createNestedObject();
-  sensitivity_setting["type"] = "numeric";
-  sensitivity_setting["name"] = "sensitivity";
-  sensitivity_setting["property"] = "sensitivity";
-  sensitivity_setting["access"] = 3; // Read/Write
-  sensitivity_setting["min"] = 1;
-  sensitivity_setting["max"] = 10;
-  sensitivity_setting["description"] = "Sensitivity setting";
-  
-  // Define device metadata
-  JsonObject device_info = device_doc.createNestedObject("device");
-  device_info["manufacturer"] = "ai-thinker";
+  // Create a consistent device info object for all sensors
+  StaticJsonDocument<200> device_doc;
+  JsonObject device_info = device_doc.to<JsonObject>();
+  device_info["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  device_info["name"] = "RD03E Radar Sensor";
   device_info["model"] = "RD03E";
+  device_info["manufacturer"] = "ai-thinker";
   device_info["sw_version"] = "1.0.0";
-  device_info["hw_version"] = "1.0";
-  device_info["id"] = "D30EFD30EF";
-  char buffer[768];
   
-  // Serialize and check for errors
-  size_t json_length = serializeJson(device_doc, buffer, sizeof(buffer));
+  char device_buffer[200];
+  serializeJson(device_info, device_buffer);
   
-  if (json_length > 0 && json_length < sizeof(buffer)) {
-    // Publish device definition to Zigbee2MQTT devices topic
-    String device_topic = String(MQTT_Z2M_DEVICES_TOPIC) + "/" + MQTT_DEVICE_ID;
-    
-    // Debug - Log MQTT device discovery publish
-    Serial.print("[MQTT DISCOVERY] Topic: ");
-    Serial.print(device_topic);
-    Serial.print(" Payload Length: ");
-    Serial.println(json_length);
-    
-    bool pub_result = mqtt_client.publish(device_topic.c_str(), buffer, true);
-    
-    if (pub_result) {
-      Serial.println("[MQTT DISCOVERY] Successfully published device information");
-    } else {
-      Serial.print("[MQTT ERROR] Failed to publish device discovery information. Length: ");
-      Serial.print(json_length);
-      Serial.print(", State: ");
-      Serial.println(mqtt_client.state());
-    }
-  } else {
-    Serial.print("[MQTT ERROR] JSON serialization failed or buffer too small. Length: ");
-    Serial.println(json_length);
-    
-    // Try with a smaller payload if the full one is too large
-    StaticJsonDocument<256> minimal_doc;
-    minimal_doc["name"] = "rd03e_radar";
-    minimal_doc["model"] = "RD03E";
-    minimal_doc["id"] = "D30EFD30EF";
-    
-    char small_buffer[256];
-    size_t small_length = serializeJson(minimal_doc, small_buffer, sizeof(small_buffer));
-    
-    Serial.print("[MQTT RECOVERY] Attempting smaller payload with length: ");
-    Serial.println(small_length);
-    
-    String device_topic = String(MQTT_Z2M_DEVICES_TOPIC) + "/" + MQTT_DEVICE_ID;
-    bool pub_result = mqtt_client.publish(device_topic.c_str(), small_buffer, true);
-    Serial.print("[MQTT RECOVERY] Fallback publish result: ");
-    Serial.println(pub_result ? "OK" : "Failed");
-  }
+  // ----- Presence Sensor (Binary) -----
+  StaticJsonDocument<400> presence_doc;
+  presence_doc["name"] = "Presence";
+  presence_doc["device_class"] = "presence";
+  presence_doc["state_topic"] = MQTT_PRESENCE_TOPIC;
+  presence_doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  presence_doc["payload_on"] = "true";
+  presence_doc["payload_off"] = "false";
+  presence_doc["value_template"] = "{{ value }}";
+  presence_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_presence_" + String(ESP.getChipId(), HEX);
+  
+  // Add the device info
+  JsonObject presence_device = presence_doc.createNestedObject("device");
+  presence_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  presence_device["name"] = "RD03E Radar Sensor";
+  presence_device["model"] = "RD03E";
+  presence_device["manufacturer"] = "ai-thinker";
+  presence_device["sw_version"] = "1.0.0";
+  
+  char presence_buffer[400];
+  size_t presence_length = serializeJson(presence_doc, presence_buffer, sizeof(presence_buffer));
+  
+  bool presence_result = mqtt_client.publish(MQTT_DISCOVERY_PRESENCE, presence_buffer, true);
+  Serial.printf("[MQTT DISCOVERY] Presence sensor: %s\n", presence_result ? "OK" : "Failed");
+  
+  // ----- Movement Sensor (Binary) -----
+  StaticJsonDocument<400> movement_doc;
+  movement_doc["name"] = "Movement";
+  movement_doc["device_class"] = "motion";
+  movement_doc["state_topic"] = MQTT_MOVEMENT_TOPIC;
+  movement_doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  movement_doc["payload_on"] = "true";
+  movement_doc["payload_off"] = "false";
+  movement_doc["value_template"] = "{{ value }}";
+  movement_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_movement_" + String(ESP.getChipId(), HEX);
+  
+  // Add the device info
+  JsonObject movement_device = movement_doc.createNestedObject("device");
+  movement_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  movement_device["name"] = "RD03E Radar Sensor";
+  movement_device["model"] = "RD03E";
+  movement_device["manufacturer"] = "ai-thinker";
+  movement_device["sw_version"] = "1.0.0";
+  
+  char movement_buffer[400];
+  size_t movement_length = serializeJson(movement_doc, movement_buffer, sizeof(movement_buffer));
+  
+  bool movement_result = mqtt_client.publish(MQTT_DISCOVERY_MOVEMENT, movement_buffer, true);
+  Serial.printf("[MQTT DISCOVERY] Movement sensor: %s\n", movement_result ? "OK" : "Failed");
+  
+  // ----- Distance Sensor (Numeric) -----
+  StaticJsonDocument<400> distance_doc;
+  distance_doc["name"] = "Distance";
+  distance_doc["device_class"] = "distance";
+  distance_doc["state_topic"] = MQTT_DISTANCE_TOPIC;
+  distance_doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  distance_doc["unit_of_measurement"] = "m";
+  distance_doc["value_template"] = "{{ value }}";
+  distance_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_distance_" + String(ESP.getChipId(), HEX);
+  
+  // Add the device info
+  JsonObject distance_device = distance_doc.createNestedObject("device");
+  distance_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  distance_device["name"] = "RD03E Radar Sensor";
+  distance_device["model"] = "RD03E";
+  distance_device["manufacturer"] = "ai-thinker";
+  distance_device["sw_version"] = "1.0.0";
+  
+  char distance_buffer[400];
+  size_t distance_length = serializeJson(distance_doc, distance_buffer, sizeof(distance_buffer));
+  
+  bool distance_result = mqtt_client.publish(MQTT_DISCOVERY_DISTANCE, distance_buffer, true);
+  Serial.printf("[MQTT DISCOVERY] Distance sensor: %s\n", distance_result ? "OK" : "Failed");
+  
+  // ----- Detection Distance Setting (Numeric with configuration) -----
+  StaticJsonDocument<400> detection_distance_doc;
+  detection_distance_doc["name"] = "Detection Distance";
+  detection_distance_doc["icon"] = "mdi:ruler";
+  detection_distance_doc["state_topic"] = MQTT_BASE_TOPIC + String("/detection_distance/state");
+  detection_distance_doc["command_topic"] = MQTT_BASE_TOPIC + String("/detection_distance/set");
+  detection_distance_doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  detection_distance_doc["unit_of_measurement"] = "m";
+  detection_distance_doc["min"] = 0.5;
+  detection_distance_doc["max"] = 6.0;
+  detection_distance_doc["step"] = 0.1;
+  detection_distance_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_detection_distance_" + String(ESP.getChipId(), HEX);
+  
+  // Add the device info
+  JsonObject detection_distance_device = detection_distance_doc.createNestedObject("device");
+  detection_distance_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  detection_distance_device["name"] = "RD03E Radar Sensor";
+  detection_distance_device["model"] = "RD03E";
+  detection_distance_device["manufacturer"] = "ai-thinker";
+  detection_distance_device["sw_version"] = "1.0.0";
+  
+  char detection_distance_buffer[400];
+  size_t detection_distance_length = serializeJson(detection_distance_doc, detection_distance_buffer, sizeof(detection_distance_buffer));
+  
+  bool detection_distance_result = mqtt_client.publish(MQTT_DISCOVERY_DETECTION_DISTANCE, detection_distance_buffer, true);
+  Serial.printf("[MQTT DISCOVERY] Detection Distance setting: %s\n", detection_distance_result ? "OK" : "Failed");
+  
+  // ----- Sensitivity Setting (Numeric with configuration) -----
+  StaticJsonDocument<400> sensitivity_doc;
+  sensitivity_doc["name"] = "Sensitivity";
+  sensitivity_doc["icon"] = "mdi:tune";
+  sensitivity_doc["state_topic"] = MQTT_BASE_TOPIC + String("/sensitivity/state");
+  sensitivity_doc["command_topic"] = MQTT_BASE_TOPIC + String("/sensitivity/set");
+  sensitivity_doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  sensitivity_doc["min"] = 1;
+  sensitivity_doc["max"] = 10;
+  sensitivity_doc["step"] = 1;
+  sensitivity_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_sensitivity_" + String(ESP.getChipId(), HEX);
+  
+  // Add the device info
+  JsonObject sensitivity_device = sensitivity_doc.createNestedObject("device");
+  sensitivity_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipId(), HEX);
+  sensitivity_device["name"] = "RD03E Radar Sensor";
+  sensitivity_device["model"] = "RD03E";
+  sensitivity_device["manufacturer"] = "ai-thinker";
+  sensitivity_device["sw_version"] = "1.0.0";
+  
+  char sensitivity_buffer[400];
+  size_t sensitivity_length = serializeJson(sensitivity_doc, sensitivity_buffer, sizeof(sensitivity_buffer));
+  
+  bool sensitivity_result = mqtt_client.publish(MQTT_DISCOVERY_SENSITIVITY, sensitivity_buffer, true);
+  Serial.printf("[MQTT DISCOVERY] Sensitivity setting: %s\n", sensitivity_result ? "OK" : "Failed");
 }
 
 void handle_config_message(const JsonDocument& doc) {
@@ -488,7 +519,7 @@ void handle_config_message(const JsonDocument& doc) {
     if (new_sensitivity >= 1 && new_sensitivity <= 10) {
       if (new_sensitivity != sensitivity) {
         sensitivity = new_sensitivity;
-        radar.set_sensitivity(sensitivity);
+        radar.set_sensitivity(40.0f, 6.0f, 40.0f, 9.0f);
         config_changed = true;
         Serial.print("[CONFIG UPDATED] Sensitivity set to: ");
         Serial.println(sensitivity);

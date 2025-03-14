@@ -13,23 +13,29 @@
   #define MQTT_PASSWORD ""
 #endif
 
-// MQTT Topics - Zigbee2MQTT integration
-#define MQTT_Z2M_PREFIX "zigbee2mqtt"
+// MQTT Discovery configuration for Home Assistant
+#define MQTT_DISCOVERY_PREFIX "homeassistant"
 #define MQTT_DEVICE_ID "rd03e_radar"
-#define MQTT_UNIQUE_ID "D30EFD30EF"
+#define MQTT_UNIQUE_ID "RD03E"
+#define MQTT_NODE_ID ESP.getChipId()
 
-// Device topic structure
-#define MQTT_BASE_TOPIC MQTT_Z2M_PREFIX "/" MQTT_DEVICE_ID
-#define MQTT_PRESENCE_TOPIC MQTT_BASE_TOPIC "/presence"
-#define MQTT_MOVEMENT_TOPIC MQTT_BASE_TOPIC "/movement"
-#define MQTT_DISTANCE_TOPIC MQTT_BASE_TOPIC "/distance"
+// Device topic structure for state updates
+#define MQTT_BASE_TOPIC "rd03e_radar"
+#define MQTT_PRESENCE_TOPIC MQTT_BASE_TOPIC "/presence/state"
+#define MQTT_MOVEMENT_TOPIC MQTT_BASE_TOPIC "/movement/state"
+#define MQTT_DISTANCE_TOPIC MQTT_BASE_TOPIC "/distance/state"
 #define MQTT_CONFIG_TOPIC MQTT_BASE_TOPIC "/set"
 #define MQTT_GET_TOPIC MQTT_BASE_TOPIC "/get"
-#define MQTT_STATUS_TOPIC MQTT_BASE_TOPIC "/availability"
+#define MQTT_STATUS_TOPIC MQTT_BASE_TOPIC "/status"
 
-// Zigbee2MQTT specific topics
-#define MQTT_Z2M_BRIDGE_TOPIC MQTT_Z2M_PREFIX "/bridge"
-#define MQTT_Z2M_DEVICES_TOPIC MQTT_Z2M_BRIDGE_TOPIC "/devices"
+// Discovery Topics
+#define MQTT_DISCOVERY_BINARY_SENSOR MQTT_DISCOVERY_PREFIX "/binary_sensor"
+#define MQTT_DISCOVERY_SENSOR MQTT_DISCOVERY_PREFIX "/sensor"
+#define MQTT_DISCOVERY_PRESENCE MQTT_DISCOVERY_BINARY_SENSOR "/" MQTT_DEVICE_ID "/presence/config"
+#define MQTT_DISCOVERY_MOVEMENT MQTT_DISCOVERY_BINARY_SENSOR "/" MQTT_DEVICE_ID "/movement/config"
+#define MQTT_DISCOVERY_DISTANCE MQTT_DISCOVERY_SENSOR "/" MQTT_DEVICE_ID "/distance/config"
+#define MQTT_DISCOVERY_SENSITIVITY MQTT_DISCOVERY_SENSOR "/" MQTT_DEVICE_ID "/sensitivity/config"
+#define MQTT_DISCOVERY_DETECTION_DISTANCE MQTT_DISCOVERY_SENSOR "/" MQTT_DEVICE_ID "/detection_distance/config"
 
 // RD03-E Radar settings
 #define RADAR_RX_PIN 16    // GPIO16 for receiving data from radar

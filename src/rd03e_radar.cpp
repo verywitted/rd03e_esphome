@@ -75,8 +75,11 @@ void RD03ERadar::set_sensitivity(float proximalMotion,
     this->_config->noiseParams.distalMicro = distalMicro;
     this->_config->modified.noiseParams = true;
     this->config_pending = true;
-    Serial.print("Setting sensitivity to: ");
-    Serial.println(sensitivity);
+    Serial.print("Setting sensitivity parameters: ");
+    Serial.print(proximalMotion); Serial.print(", ");
+    Serial.print(distalMotion); Serial.print(", ");
+    Serial.print(proximalMicro); Serial.print(", ");
+    Serial.println(distalMicro);
   }
 
 
@@ -110,24 +113,27 @@ void RD03ERadar::process_byte(uint8_t data) {
         }
       else {
             // Add byte to buffer
-          if (buffer_index > 1) {
+          if (buffer_index > 0) {
             buffer[buffer_index] = data;
             buffer_index++;      
           }
-
         }
 
     // Prevent buffer overflow
     if (buffer_index >= BUFFER_SIZE) {
       buffer_index = 0;
     }
-    uint8_t header[] = {buffer[0], buffer[1], buffer[2], buffer[3]};
-    if (buffer_index == 4 && header == ACK_FRAME_HEADER)
-    {
-      // Acknowledgment frame received
-      Serial.println("Acknowledgment frame received");
+    
+    // Check for acknowledgment frame
+    if (buffer_index >= 4) {
+      if (buffer[0] == ACK_FRAME_HEADER[0] && 
+          buffer[1] == ACK_FRAME_HEADER[1] && 
+          buffer[2] == ACK_FRAME_HEADER[2] && 
+          buffer[3] == ACK_FRAME_HEADER[3]) {
+        // Acknowledgment frame received
+        Serial.println("Acknowledgment frame received");
+      }
     }
-
   }
 
 void RD03ERadar::process_frame() {
@@ -163,6 +169,8 @@ void RD03ERadar::process_frame() {
       uart->write(data, dataLen);
     }
     uart->write(footer, 4);
+    
+    return true; // Return success
   }
   
   // Wait for and validate ACK response
@@ -170,12 +178,12 @@ void RD03ERadar::process_frame() {
     return true;
   }
 
-  void RD03ERadar::setConfig(RD03EConfig* config) {
-     _config = config;
+  void RD03ERadar::setConfig(const RD03EConfig *config){
+     _config = const_cast<RD03EConfig*>(config); // Remove const to store in member variable
   }
   
   // Get current configuration
-  RD03EConfig RD03ERadar::getConfig() {
+  RD03EConfig* RD03ERadar::getConfig() {
     return _config;
   }
   
@@ -188,14 +196,14 @@ void RD03ERadar::process_frame() {
     }
     
     // Apply distance calibration if modified
-    if (_config.modified.distanceSettings) {
-      uint8_t data[6]
+    if (_config->modified.distanceSettings) {
+      uint8_t data1[6];
       uint16_t paramRef = static_cast<uint16_t>(ParamRef::DISTANCE_CALIBRATION);
-      memcpy(data, &paramRef, 2);
-      memcpy(data + 2, &_config->distanceCalibration, 4);
-      if (!sendCommand(0x0072, data, 6)) return false;
+      memcpy(data1, &paramRef, 2);
+      memcpy(data1 + 2, &_config->distanceCalibration, 4);
+      if (!sendCommand(0x0072, data1, 6)) return false;
     
-      uint8_t data[32];
+      uint8_t data2[32];
       uint16_t paramRefs[] = {
         static_cast<uint16_t>(ParamRef::MAX_MACRO_MOVEMENT_DISTANCE),
         static_cast<uint16_t>(ParamRef::MIN_MACRO_MOVEMENT_DISTANCE),
@@ -214,13 +222,21 @@ void RD03ERadar::process_frame() {
       
       int offset = 0;
       for (int i = 0; i < 5; i++) {
-        memcpy(data + offset, &paramRefs[i], 2);
+        memcpy(data2 + offset, &paramRefs[i], 2);
         offset += 2;
-        memcpy(data + offset, &values[i], 4);
+        memcpy(data2 + offset, &values[i], 4);
         offset += 4;
       }
       
-      if (!sendCommand(0x0067, data, offset)) return false;
+      if (!sendCommand(0x0067, data2, offset)) return false;
     }
+    
+    // Apply noise parameters if modified
+    if (_config->modified.noiseParams) {
+      // Implementation for noise parameters
+      // ...
+    }
+    
+    return true;
   }
       

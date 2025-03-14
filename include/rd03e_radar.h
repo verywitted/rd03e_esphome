@@ -63,8 +63,8 @@ private:
   void send_config_command();
   bool waitForAck(uint16_t cmdWord);
   bool sendCommand(uint16_t cmdWord, const uint8_t* data, uint16_t dataLen);
-  void setConfig(const RD03EConfig& config);
-  RD03EConfig& getConfig();
+  void setConfig(const RD03EConfig* config);
+  RD03EConfig* getConfig();
   bool applyConfig();
   
 };
