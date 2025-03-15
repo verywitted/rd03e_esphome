@@ -17,7 +17,8 @@
 #define MQTT_DISCOVERY_PREFIX "homeassistant"
 #define MQTT_DEVICE_ID "rd03e_radar"
 #define MQTT_UNIQUE_ID "RD03E"
-#define MQTT_NODE_ID ESP.getChipModel();
+// Use a fixed identifier - don't use ESP.getChipModel() as it might change
+#define MQTT_DEVICE_IDENTIFIER MQTT_UNIQUE_ID
 
 // Home Assistant global status topic for detecting device availability
 #define MQTT_HA_STATUS_TOPIC "homeassistant/status"
