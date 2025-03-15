@@ -485,29 +485,39 @@ void publish_device_discovery() {
   publish_distance_sensor_discovery();
   delay(50);
   
+  // Create topic strings
+  String detection_distance_state = String(MQTT_BASE_TOPIC) + "/detection_distance/state";
+  String detection_distance_set = String(MQTT_BASE_TOPIC) + "/detection_distance/set"; 
+  String sensitivity_state = String(MQTT_BASE_TOPIC) + "/sensitivity/state";
+  String sensitivity_set = String(MQTT_BASE_TOPIC) + "/sensitivity/set";
+  String noise_params_state = String(MQTT_BASE_TOPIC) + "/noise_params/state";
+  String noise_params_set = String(MQTT_BASE_TOPIC) + "/noise_params/set";
+  String distance_settings_state = String(MQTT_BASE_TOPIC) + "/distance_settings/state";
+  String distance_settings_set = String(MQTT_BASE_TOPIC) + "/distance_settings/set";
+  
   // Publish the number settings
   publish_number_discovery("Detection Distance", "mdi:ruler", 
-                        MQTT_BASE_TOPIC + String("/detection_distance/state"),
-                        MQTT_BASE_TOPIC + String("/detection_distance/set"),
+                        detection_distance_state.c_str(),
+                        detection_distance_set.c_str(),
                         0.5, 6.0, 0.1, "m", "detection_distance");
   delay(50);
   
   publish_number_discovery("Sensitivity", "mdi:tune",
-                        MQTT_BASE_TOPIC + String("/sensitivity/state"),
-                        MQTT_BASE_TOPIC + String("/sensitivity/set"),
+                        sensitivity_state.c_str(),
+                        sensitivity_set.c_str(),
                         1, 10, 1, "", "sensitivity");
   delay(50);
   
   // Publish the JSON sensors
   publish_json_sensor_discovery("Noise Parameters", "mdi:tune-vertical",
-                           MQTT_BASE_TOPIC + String("/noise_params/state"),
-                           MQTT_BASE_TOPIC + String("/noise_params/set"),
+                           noise_params_state.c_str(),
+                           noise_params_set.c_str(),
                            "noise_params");
   delay(50);
   
   publish_json_sensor_discovery("Distance Settings", "mdi:ruler-square",
-                           MQTT_BASE_TOPIC + String("/distance_settings/state"),
-                           MQTT_BASE_TOPIC + String("/distance_settings/set"),
+                           distance_settings_state.c_str(),
+                           distance_settings_set.c_str(),
                            "distance_settings");
 }
 
