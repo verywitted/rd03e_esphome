@@ -707,18 +707,16 @@ void handle_config_message(const JsonDocument& doc) {
   
   // Check if configuration contains noise parameters
   if (doc.containsKey("noise_params")) {
-    JsonObject noise_params = doc["noise_params"].as<JsonObject>();
-    
     // Check if we have all four parameters
-    if (noise_params.containsKey("proximalMotion") && 
-        noise_params.containsKey("distalMotion") && 
-        noise_params.containsKey("proximalMicro") && 
-        noise_params.containsKey("distalMicro")) {
+    if (doc["noise_params"].containsKey("proximalMotion") && 
+        doc["noise_params"].containsKey("distalMotion") && 
+        doc["noise_params"].containsKey("proximalMicro") && 
+        doc["noise_params"].containsKey("distalMicro")) {
         
-      float proximalMotion = noise_params["proximalMotion"];
-      float distalMotion = noise_params["distalMotion"];
-      float proximalMicro = noise_params["proximalMicro"];
-      float distalMicro = noise_params["distalMicro"];
+      float proximalMotion = doc["noise_params"]["proximalMotion"];
+      float distalMotion = doc["noise_params"]["distalMotion"];
+      float proximalMicro = doc["noise_params"]["proximalMicro"];
+      float distalMicro = doc["noise_params"]["distalMicro"];
       
       // Validate values (using reasonable ranges)
       if (proximalMotion >= 10.0 && proximalMotion <= 100.0 &&
@@ -744,46 +742,45 @@ void handle_config_message(const JsonDocument& doc) {
   
   // Check if configuration contains distance settings
   if (doc.containsKey("distance_settings")) {
-    JsonObject dist_settings = doc["distance_settings"].as<JsonObject>();
     
     RD03EConfig* config = radar.getConfig();
     if (config != nullptr) {
       bool distanceChanged = false;
       
-      if (dist_settings.containsKey("maxMacroMovement")) {
-        uint32_t value = dist_settings["maxMacroMovement"];
+      if (doc["distance_settings"].containsKey("maxMacroMovement")) {
+        uint32_t value = doc["distance_settings"]["maxMacroMovement"];
         if (value >= 30 && value <= 717) {
           config->distanceSettings.maxMacroMovement = value;
           distanceChanged = true;
         }
       }
       
-      if (dist_settings.containsKey("minMacroMovement")) {
-        uint32_t value = dist_settings["minMacroMovement"];
+      if (doc["distance_settings"].containsKey("minMacroMovement")) {
+        uint32_t value = doc["distance_settings"]["minMacroMovement"];
         if (value >= 0 && value <= 100) {
           config->distanceSettings.minMacroMovement = value;
           distanceChanged = true;
         }
       }
       
-      if (dist_settings.containsKey("maxMicroMotion")) {
-        uint32_t value = dist_settings["maxMicroMotion"];
+      if (doc["distance_settings"].containsKey("maxMicroMotion")) {
+        uint32_t value = doc["distance_settings"]["maxMicroMotion"];
         if (value >= 30 && value <= 425) {
           config->distanceSettings.maxMicroMotion = value;
           distanceChanged = true;
         }
       }
       
-      if (dist_settings.containsKey("minMicroMotion")) {
-        uint32_t value = dist_settings["minMicroMotion"];
+      if (doc["distance_settings"].containsKey("minMicroMotion")) {
+        uint32_t value = doc["distance_settings"]["minMicroMotion"];
         if (value >= 0 && value <= 100) {
           config->distanceSettings.minMicroMotion = value;
           distanceChanged = true;
         }
       }
       
-      if (dist_settings.containsKey("unmannedDuration")) {
-        uint32_t value = dist_settings["unmannedDuration"];
+      if (doc["distance_settings"].containsKey("unmannedDuration")) {
+        uint32_t value = doc["distance_settings"]["unmannedDuration"];
         if (value >= 0 && value <= 65535) {
           config->distanceSettings.unmannedDuration = value;
           distanceChanged = true;

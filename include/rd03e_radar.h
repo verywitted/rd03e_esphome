@@ -22,7 +22,7 @@ public:
   bool is_presence_detected() const;
   bool is_movement_detected() const;
   float get_distance() const;
-  RD03EConfig* getConfig();
+  RD03EConfig* getConfig(); // Get the current configuration
   
 private:
   // UART communication
@@ -65,7 +65,6 @@ private:
   bool waitForAck(uint16_t cmdWord);
   bool sendCommand(uint16_t cmdWord, const uint8_t* data, uint16_t dataLen);
   void setConfig(const RD03EConfig* config);
-  RD03EConfig* getConfig();
   bool applyConfig();
   
 };
