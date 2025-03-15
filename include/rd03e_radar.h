@@ -22,6 +22,7 @@ public:
   bool is_presence_detected() const;
   bool is_movement_detected() const;
   float get_distance() const;
+  RD03EConfig* getConfig();
   
 private:
   // UART communication

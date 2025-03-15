@@ -53,6 +53,8 @@ void publish_state();
 void publish_sensor_data(bool force = false);
 void publish_device_discovery();
 void handle_config_message(const JsonDocument& doc);
+void publish_noise_params();
+void publish_distance_settings();
 
 void setup() {
   // Initialize serial for debugging
@@ -253,6 +255,10 @@ void publish_sensor_data(bool force) {
   bool pub_detection_distance = mqtt_client.publish((MQTT_BASE_TOPIC + String("/detection_distance/state")).c_str(), detection_distance_str, true);
   bool pub_sensitivity = mqtt_client.publish((MQTT_BASE_TOPIC + String("/sensitivity/state")).c_str(), sensitivity_str, true);
   
+  // Also publish noise parameters and distance settings
+  publish_noise_params();
+  publish_distance_settings();
+  
   // Log the publish results
   Serial.printf("[MQTT PUBLISH] Presence: %s, Movement: %s, Distance: %s, DetectionDist: %s, Sensitivity: %s\n",
                pub_presence ? "OK" : "Fail",
@@ -279,6 +285,39 @@ void publish_sensor_data(bool force) {
   }
 }
 
+void publish_noise_params() {
+  RD03EConfig* config = radar.getConfig();
+  if (config != nullptr && mqtt_client.connected()) {
+    StaticJsonDocument<512> state_doc;
+    state_doc["proximalMotion"] = config->noiseParams.proximalMotion;
+    state_doc["distalMotion"] = config->noiseParams.distalMotion;
+    state_doc["proximalMicro"] = config->noiseParams.proximalMicro;
+    state_doc["distalMicro"] = config->noiseParams.distalMicro;
+    
+    char buffer[512];
+    size_t n = serializeJson(state_doc, buffer);
+    bool result = mqtt_client.publish((MQTT_BASE_TOPIC + String("/noise_params/state")).c_str(), buffer, true);
+    Serial.printf("[MQTT PUBLISH] Noise Parameters: %s\n", result ? "OK" : "Fail");
+  }
+}
+
+void publish_distance_settings() {
+  RD03EConfig* config = radar.getConfig();
+  if (config != nullptr && mqtt_client.connected()) {
+    StaticJsonDocument<512> state_doc;
+    state_doc["maxMacroMovement"] = config->distanceSettings.maxMacroMovement;
+    state_doc["minMacroMovement"] = config->distanceSettings.minMacroMovement;
+    state_doc["maxMicroMotion"] = config->distanceSettings.maxMicroMotion;
+    state_doc["minMicroMotion"] = config->distanceSettings.minMicroMotion;
+    state_doc["unmannedDuration"] = config->distanceSettings.unmannedDuration;
+    
+    char buffer[512];
+    size_t n = serializeJson(state_doc, buffer);
+    bool result = mqtt_client.publish((MQTT_BASE_TOPIC + String("/distance_settings/state")).c_str(), buffer, true);
+    Serial.printf("[MQTT PUBLISH] Distance Settings: %s\n", result ? "OK" : "Fail");
+  }
+}
+
 void mqtt_callback(char* topic, byte* payload, unsigned int length) {
   // Convert payload to string for debugging
   String message;
@@ -296,7 +335,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     Serial.println("[MQTT PROCESSING] Config message received");
     
     // Parse JSON configuration
-    StaticJsonDocument<200> doc;
+    StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, payload, length);
     
     if (error) {
@@ -313,13 +352,113 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     // Handle configuration changes
     handle_config_message(doc);
   }
-  // Check if this is a get request (Z2M uses /get topic for retrieving values)
+  // Check if this is for specific parameter topics
+  else if (String(topic).indexOf(MQTT_BASE_TOPIC) == 0 && String(topic).endsWith("/set")) {
+    // Handle parameter-specific changes
+    if (String(topic) == String(MQTT_BASE_TOPIC) + "/detection_distance/set") {
+      // Parse as a float value
+      float distance = message.toFloat();
+      if (distance >= 0.5 && distance <= 6.0) {
+        detection_distance = distance;
+        radar.set_detection_distance(detection_distance);
+        // Publish the updated state
+        char distance_str[10];
+        dtostrf(detection_distance, 4, 2, distance_str);
+        mqtt_client.publish((MQTT_BASE_TOPIC + String("/detection_distance/state")).c_str(), distance_str, true);
+      }
+    }
+    // Handle noise parameters setting
+    else if (String(topic) == String(MQTT_BASE_TOPIC) + "/noise_params/set") {
+      StaticJsonDocument<512> doc;
+      DeserializationError error = deserializeJson(doc, payload, length);
+      
+      if (!error) {
+        // Check if we have all four parameters
+        if (doc.containsKey("proximalMotion") && doc.containsKey("distalMotion") && 
+            doc.containsKey("proximalMicro") && doc.containsKey("distalMicro")) {
+            
+          float proximalMotion = doc["proximalMotion"];
+          float distalMotion = doc["distalMotion"];
+          float proximalMicro = doc["proximalMicro"];
+          float distalMicro = doc["distalMicro"];
+          
+          radar.set_sensitivity(proximalMotion, distalMotion, proximalMicro, distalMicro);
+          
+          // Publish the updated state
+          StaticJsonDocument<512> state_doc;
+          state_doc["proximalMotion"] = proximalMotion;
+          state_doc["distalMotion"] = distalMotion;
+          state_doc["proximalMicro"] = proximalMicro;
+          state_doc["distalMicro"] = distalMicro;
+          
+          char buffer[512];
+          size_t n = serializeJson(state_doc, buffer);
+          mqtt_client.publish((MQTT_BASE_TOPIC + String("/noise_params/state")).c_str(), buffer, true);
+        }
+      }
+    }
+  }
+  // Check if this is a get request (for retrieving values)
   else if (String(topic) == String(MQTT_GET_TOPIC)) {
     Serial.println("[MQTT PROCESSING] Get request received, publishing current state");
-    // Immediately publish current state in response to a get request
-    publish_sensor_data(true);
+    
+    // Parse the get request to see what parameter(s) to publish
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, payload, length);
+    
+    if (!error) {
+      if (doc.containsKey("param")) {
+        const char* param = doc["param"];
+        
+        if (strcmp(param, "all") == 0) {
+          // Publish all parameters
+          publish_sensor_data(true);
+          
+          // Get noise parameters
+          RD03EConfig* config = radar.getConfig();
+          if (config != nullptr) {
+            StaticJsonDocument<512> state_doc;
+            state_doc["proximalMotion"] = config->noiseParams.proximalMotion;
+            state_doc["distalMotion"] = config->noiseParams.distalMotion;
+            state_doc["proximalMicro"] = config->noiseParams.proximalMicro;
+            state_doc["distalMicro"] = config->noiseParams.distalMicro;
+            
+            char buffer[512];
+            size_t n = serializeJson(state_doc, buffer);
+            mqtt_client.publish((MQTT_BASE_TOPIC + String("/noise_params/state")).c_str(), buffer, true);
+          }
+        }
+        else if (strcmp(param, "detection_distance") == 0) {
+          // Publish just the detection distance
+          char distance_str[10];
+          dtostrf(detection_distance, 4, 2, distance_str);
+          mqtt_client.publish((MQTT_BASE_TOPIC + String("/detection_distance/state")).c_str(), distance_str, true);
+        }
+        else if (strcmp(param, "noise_params") == 0) {
+          // Publish just the noise parameters
+          RD03EConfig* config = radar.getConfig();
+          if (config != nullptr) {
+            StaticJsonDocument<512> state_doc;
+            state_doc["proximalMotion"] = config->noiseParams.proximalMotion;
+            state_doc["distalMotion"] = config->noiseParams.distalMotion;
+            state_doc["proximalMicro"] = config->noiseParams.proximalMicro;
+            state_doc["distalMicro"] = config->noiseParams.distalMicro;
+            
+            char buffer[512];
+            size_t n = serializeJson(state_doc, buffer);
+            mqtt_client.publish((MQTT_BASE_TOPIC + String("/noise_params/state")).c_str(), buffer, true);
+          }
+        }
+      } else {
+        // No specific param, publish all
+        publish_sensor_data(true);
+      }
+    } else {
+      // If parsing failed, just publish all data
+      publish_sensor_data(true);
+    }
   }
-   else {
+  else {
     Serial.println("[MQTT WARNING] Message received on unexpected topic");
   }
 }
@@ -463,6 +602,54 @@ void publish_device_discovery() {
   
   bool sensitivity_result = mqtt_client.publish(MQTT_DISCOVERY_SENSITIVITY, sensitivity_buffer, true);
   Serial.printf("[MQTT DISCOVERY] Sensitivity setting: %s\n", sensitivity_result ? "OK" : "Failed");
+  
+  // ----- Noise Parameters (JSON) -----
+  StaticJsonDocument<600> noise_params_doc;
+  noise_params_doc["name"] = "Noise Parameters";
+  noise_params_doc["icon"] = "mdi:tune-vertical";
+  noise_params_doc["state_topic"] = MQTT_BASE_TOPIC + String("/noise_params/state");
+  noise_params_doc["json_attributes_topic"] = MQTT_BASE_TOPIC + String("/noise_params/state");
+  noise_params_doc["command_topic"] = MQTT_BASE_TOPIC + String("/noise_params/set");
+  noise_params_doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  noise_params_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_noise_params_" + String(ESP.getChipModel(), HEX);
+  
+  // Add the device info
+  JsonObject noise_params_device = noise_params_doc.createNestedObject("device");
+  noise_params_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
+  noise_params_device["name"] = "RD03E Radar Sensor";
+  noise_params_device["model"] = "RD03E";
+  noise_params_device["manufacturer"] = "ai-thinker";
+  noise_params_device["sw_version"] = "1.0.0";
+  
+  char noise_params_buffer[600];
+  size_t noise_params_length = serializeJson(noise_params_doc, noise_params_buffer, sizeof(noise_params_buffer));
+  
+  bool noise_params_result = mqtt_client.publish((MQTT_DISCOVERY_PREFIX + String("/sensor/") + MQTT_DEVICE_ID + String("/noise_params/config")).c_str(), noise_params_buffer, true);
+  Serial.printf("[MQTT DISCOVERY] Noise Parameters: %s\n", noise_params_result ? "OK" : "Failed");
+  
+  // ----- Distance Settings (JSON) -----
+  StaticJsonDocument<600> distance_settings_doc;
+  distance_settings_doc["name"] = "Distance Settings";
+  distance_settings_doc["icon"] = "mdi:ruler-square";
+  distance_settings_doc["state_topic"] = MQTT_BASE_TOPIC + String("/distance_settings/state");
+  distance_settings_doc["json_attributes_topic"] = MQTT_BASE_TOPIC + String("/distance_settings/state");
+  distance_settings_doc["command_topic"] = MQTT_BASE_TOPIC + String("/distance_settings/set");
+  distance_settings_doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  distance_settings_doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_distance_settings_" + String(ESP.getChipModel(), HEX);
+  
+  // Add the device info
+  JsonObject distance_settings_device = distance_settings_doc.createNestedObject("device");
+  distance_settings_device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
+  distance_settings_device["name"] = "RD03E Radar Sensor";
+  distance_settings_device["model"] = "RD03E";
+  distance_settings_device["manufacturer"] = "ai-thinker";
+  distance_settings_device["sw_version"] = "1.0.0";
+  
+  char distance_settings_buffer[600];
+  size_t distance_settings_length = serializeJson(distance_settings_doc, distance_settings_buffer, sizeof(distance_settings_buffer));
+  
+  bool distance_settings_result = mqtt_client.publish((MQTT_DISCOVERY_PREFIX + String("/sensor/") + MQTT_DEVICE_ID + String("/distance_settings/config")).c_str(), distance_settings_buffer, true);
+  Serial.printf("[MQTT DISCOVERY] Distance Settings: %s\n", distance_settings_result ? "OK" : "Failed");
 }
 
 void handle_config_message(const JsonDocument& doc) {
@@ -518,10 +705,135 @@ void handle_config_message(const JsonDocument& doc) {
     }
   }
   
+  // Check if configuration contains noise parameters
+  if (doc.containsKey("noise_params")) {
+    JsonObject noise_params = doc["noise_params"].as<JsonObject>();
+    
+    // Check if we have all four parameters
+    if (noise_params.containsKey("proximalMotion") && 
+        noise_params.containsKey("distalMotion") && 
+        noise_params.containsKey("proximalMicro") && 
+        noise_params.containsKey("distalMicro")) {
+        
+      float proximalMotion = noise_params["proximalMotion"];
+      float distalMotion = noise_params["distalMotion"];
+      float proximalMicro = noise_params["proximalMicro"];
+      float distalMicro = noise_params["distalMicro"];
+      
+      // Validate values (using reasonable ranges)
+      if (proximalMotion >= 10.0 && proximalMotion <= 100.0 &&
+          distalMotion >= 1.0 && distalMotion <= 20.0 &&
+          proximalMicro >= 10.0 && proximalMicro <= 100.0 &&
+          distalMicro >= 1.0 && distalMicro <= 20.0) {
+          
+        radar.set_sensitivity(proximalMotion, distalMotion, proximalMicro, distalMicro);
+        config_changed = true;
+        
+        Serial.println("[CONFIG UPDATED] Noise parameters set to:");
+        Serial.print("  Proximal Motion: "); Serial.println(proximalMotion);
+        Serial.print("  Distal Motion: "); Serial.println(distalMotion);
+        Serial.print("  Proximal Micro: "); Serial.println(proximalMicro);
+        Serial.print("  Distal Micro: "); Serial.println(distalMicro);
+      } else {
+        Serial.println("[CONFIG ERROR] One or more noise parameters out of range");
+      }
+    } else {
+      Serial.println("[CONFIG ERROR] Missing one or more required noise parameters");
+    }
+  }
+  
+  // Check if configuration contains distance settings
+  if (doc.containsKey("distance_settings")) {
+    JsonObject dist_settings = doc["distance_settings"].as<JsonObject>();
+    
+    RD03EConfig* config = radar.getConfig();
+    if (config != nullptr) {
+      bool distanceChanged = false;
+      
+      if (dist_settings.containsKey("maxMacroMovement")) {
+        uint32_t value = dist_settings["maxMacroMovement"];
+        if (value >= 30 && value <= 717) {
+          config->distanceSettings.maxMacroMovement = value;
+          distanceChanged = true;
+        }
+      }
+      
+      if (dist_settings.containsKey("minMacroMovement")) {
+        uint32_t value = dist_settings["minMacroMovement"];
+        if (value >= 0 && value <= 100) {
+          config->distanceSettings.minMacroMovement = value;
+          distanceChanged = true;
+        }
+      }
+      
+      if (dist_settings.containsKey("maxMicroMotion")) {
+        uint32_t value = dist_settings["maxMicroMotion"];
+        if (value >= 30 && value <= 425) {
+          config->distanceSettings.maxMicroMotion = value;
+          distanceChanged = true;
+        }
+      }
+      
+      if (dist_settings.containsKey("minMicroMotion")) {
+        uint32_t value = dist_settings["minMicroMotion"];
+        if (value >= 0 && value <= 100) {
+          config->distanceSettings.minMicroMotion = value;
+          distanceChanged = true;
+        }
+      }
+      
+      if (dist_settings.containsKey("unmannedDuration")) {
+        uint32_t value = dist_settings["unmannedDuration"];
+        if (value >= 0 && value <= 65535) {
+          config->distanceSettings.unmannedDuration = value;
+          distanceChanged = true;
+        }
+      }
+      
+      if (distanceChanged) {
+        config->modified.distanceSettings = true;
+        config_changed = true;
+        Serial.println("[CONFIG UPDATED] Distance settings updated");
+      }
+    }
+  }
+  
   // Publish updated configuration if changed
   if (config_changed) {
     Serial.println("[CONFIG] Configuration changed, publishing updated state");
     publish_sensor_data(true);
+    
+    // Additionally, publish the specific parameter states that were changed
+    if (doc.containsKey("noise_params")) {
+      RD03EConfig* config = radar.getConfig();
+      if (config != nullptr) {
+        StaticJsonDocument<512> state_doc;
+        state_doc["proximalMotion"] = config->noiseParams.proximalMotion;
+        state_doc["distalMotion"] = config->noiseParams.distalMotion;
+        state_doc["proximalMicro"] = config->noiseParams.proximalMicro;
+        state_doc["distalMicro"] = config->noiseParams.distalMicro;
+        
+        char buffer[512];
+        size_t n = serializeJson(state_doc, buffer);
+        mqtt_client.publish((MQTT_BASE_TOPIC + String("/noise_params/state")).c_str(), buffer, true);
+      }
+    }
+    
+    if (doc.containsKey("distance_settings")) {
+      RD03EConfig* config = radar.getConfig();
+      if (config != nullptr) {
+        StaticJsonDocument<512> state_doc;
+        state_doc["maxMacroMovement"] = config->distanceSettings.maxMacroMovement;
+        state_doc["minMacroMovement"] = config->distanceSettings.minMacroMovement;
+        state_doc["maxMicroMotion"] = config->distanceSettings.maxMicroMotion;
+        state_doc["minMicroMotion"] = config->distanceSettings.minMicroMotion;
+        state_doc["unmannedDuration"] = config->distanceSettings.unmannedDuration;
+        
+        char buffer[512];
+        size_t n = serializeJson(state_doc, buffer);
+        mqtt_client.publish((MQTT_BASE_TOPIC + String("/distance_settings/state")).c_str(), buffer, true);
+      }
+    }
   } else {
     Serial.println("[CONFIG] No configuration changes applied");
   }

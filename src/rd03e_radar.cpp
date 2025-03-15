@@ -16,7 +16,7 @@ RD03ERadar::RD03ERadar() : uart(nullptr) {
   movement_detected = false;
   distance_m = 0.0;
   config_pending = true;
-  RD03EConfig* _config;  // Initialize the configuration object;
+  _config = new RD03EConfig();  // Initialize the configuration object
 }
 
 void RD03ERadar::begin(int rx_pin, int tx_pin, int baud_rate) {
@@ -233,8 +233,36 @@ void RD03ERadar::process_frame() {
     
     // Apply noise parameters if modified
     if (_config->modified.noiseParams) {
-      // Implementation for noise parameters
-      // ...
+      uint8_t data[24];
+      uint16_t paramRefs[] = {
+        static_cast<uint16_t>(ParamRef::PROXIMAL_MOTION_NOISE),
+        static_cast<uint16_t>(ParamRef::DISTAL_MOTION_NOISE),
+        static_cast<uint16_t>(ParamRef::PROXIMAL_MICRO_NOISE),
+        static_cast<uint16_t>(ParamRef::DISTAL_MICRO_NOISE)
+      };
+      
+      float values[] = {
+        _config->noiseParams.proximalMotion,
+        _config->noiseParams.distalMotion,
+        _config->noiseParams.proximalMicro,
+        _config->noiseParams.distalMicro
+      };
+      
+      int offset = 0;
+      for (int i = 0; i < 4; i++) {
+        memcpy(data + offset, &paramRefs[i], 2);
+        offset += 2;
+        memcpy(data + offset, &values[i], 4);
+        offset += 4;
+      }
+      
+      if (!sendCommand(0x0068, data, offset)) return false;
+      _config->modified.noiseParams = false;
+    }
+    
+    // Mark all modified flags as false since we've applied the changes
+    if (_config->modified.distanceSettings) {
+      _config->modified.distanceSettings = false;
     }
     
     return true;
