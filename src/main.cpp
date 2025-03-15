@@ -549,7 +549,8 @@ void add_device_info(JsonDocument& doc) {
   // Create an array for identifiers (Home Assistant prefers array format)
   JsonArray identifiers = device.createNestedArray("identifiers");
   // Use a consistent identifier that doesn't change between boots
-  identifiers.add(MQTT_DEVICE_IDENTIFIER);
+  // Convert to String explicitly to ensure proper string termination
+  identifiers.add(String(MQTT_DEVICE_IDENTIFIER).c_str());
   
   device["name"] = "RD03E Radar Sensor";
   device["model"] = "RD03E";
@@ -570,7 +571,8 @@ void publish_binary_sensor_discovery(const char* name, const char* device_class,
   doc["payload_on"] = "true";
   doc["payload_off"] = "false";
   doc["value_template"] = "{{ value }}";
-  doc["unique_id"] = String(MQTT_DEVICE_IDENTIFIER) + "_" + unique_id_suffix;
+  // Ensure proper string termination by constructing a fresh String
+  doc["unique_id"] = String(String(MQTT_DEVICE_IDENTIFIER) + "_" + unique_id_suffix);
   
   // Add the device info
   add_device_info(doc);
@@ -597,7 +599,8 @@ void publish_distance_sensor_discovery() {
   doc["availability_topic"] = MQTT_STATUS_TOPIC;
   doc["unit_of_measurement"] = "m";
   doc["value_template"] = "{{ value }}";
-  doc["unique_id"] = String(MQTT_DEVICE_IDENTIFIER) + "_distance";
+  // Ensure proper string termination by constructing a fresh String
+  doc["unique_id"] = String(String(MQTT_DEVICE_IDENTIFIER) + "_distance");
   
   // Add the device info
   add_device_info(doc);
@@ -633,7 +636,8 @@ void publish_number_discovery(const char* name, const char* icon, const char* st
   doc["min"] = min_val;
   doc["max"] = max_val;
   doc["step"] = step_val;
-  doc["unique_id"] = String(MQTT_DEVICE_IDENTIFIER) + "_" + unique_id_suffix;
+  // Ensure proper string termination by constructing a fresh String
+  doc["unique_id"] = String(String(MQTT_DEVICE_IDENTIFIER) + "_" + unique_id_suffix);
   
   // Add the device info
   add_device_info(doc);
@@ -661,7 +665,8 @@ void publish_json_sensor_discovery(const char* name, const char* icon, const cha
   doc["json_attributes_topic"] = state_topic;
   doc["command_topic"] = command_topic;
   doc["availability_topic"] = MQTT_STATUS_TOPIC;
-  doc["unique_id"] = String(MQTT_DEVICE_IDENTIFIER) + "_" + unique_id_suffix;
+  // Ensure proper string termination by constructing a fresh String
+  doc["unique_id"] = String(String(MQTT_DEVICE_IDENTIFIER) + "_" + unique_id_suffix);
   doc["entity_category"] = "config";
   
   // Add the device info
