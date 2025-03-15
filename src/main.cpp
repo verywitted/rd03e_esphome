@@ -22,6 +22,7 @@ const char* mqtt_movement_topic = MQTT_MOVEMENT_TOPIC;
 const char* mqtt_distance_topic = MQTT_DISTANCE_TOPIC;
 const char* mqtt_config_topic = MQTT_CONFIG_TOPIC;
 const char* mqtt_status_topic = MQTT_STATUS_TOPIC;
+const char* mqtt_ha_status_topic = MQTT_HA_STATUS_TOPIC;
 
 // Default sensor configuration
 float detection_distance = DEFAULT_DETECTION_DISTANCE;
@@ -171,7 +172,7 @@ void reconnect_mqtt() {
     )) {
       Serial.println("[MQTT] Connected successfully");
       
-      // Subscribe to relevant Zigbee2MQTT topics
+      // Subscribe to relevant topics
       Serial.print("[MQTT SUB] ");
       Serial.println(mqtt_config_topic);
       mqtt_client.subscribe(mqtt_config_topic);
@@ -179,6 +180,11 @@ void reconnect_mqtt() {
       Serial.print("[MQTT SUB] ");
       Serial.println(MQTT_GET_TOPIC);
       mqtt_client.subscribe(MQTT_GET_TOPIC);
+      
+      // Subscribe to Home Assistant status topic to detect when HA comes online
+      Serial.print("[MQTT SUB] ");
+      Serial.println(mqtt_ha_status_topic);
+      mqtt_client.subscribe(mqtt_ha_status_topic);
       
       
       // Publish availability for Zigbee2MQTT
@@ -458,8 +464,23 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
       publish_sensor_data(true);
     }
   }
+  // Check if this is Home Assistant status message
+  else if (String(topic) == String(mqtt_ha_status_topic)) {
+    Serial.print("[MQTT] Home Assistant status change: ");
+    Serial.println(message);
+    
+    // If Home Assistant is announcing it's online, republish discovery
+    if (message == "online") {
+      Serial.println("[MQTT] Home Assistant came online, republishing discovery and state");
+      // Wait a moment for HA to get ready
+      delay(1000);
+      publish_device_discovery();
+      delay(500);
+      publish_sensor_data(true);
+    }
+  }
   else {
-    Serial.println("[MQTT WARNING] Message received on unexpected topic");
+    Serial.println("[MQTT WARNING] Message received on unexpected topic: " + String(topic));
   }
 }
 
@@ -474,16 +495,16 @@ void publish_json_sensor_discovery(const char* name, const char* icon, const cha
 void publish_device_discovery() {
   // Publish individual discoveries one at a time to avoid stack overflows
   
-  // First publish the binary sensors
+  // First publish the binary sensors - use device name as prefix for better organization
   publish_binary_sensor_discovery("Presence", "presence", MQTT_PRESENCE_TOPIC, "presence");
-  delay(50); // Small delay between publishes to avoid buffer issues
+  delay(100); // Slightly longer delay between publishes to avoid buffer issues
   
   publish_binary_sensor_discovery("Movement", "motion", MQTT_MOVEMENT_TOPIC, "movement");
-  delay(50);
+  delay(100);
   
   // Publish the distance sensor
   publish_distance_sensor_discovery();
-  delay(50);
+  delay(100);
   
   // Create topic strings
   String detection_distance_state = String(MQTT_BASE_TOPIC) + "/detection_distance/state";
@@ -500,20 +521,20 @@ void publish_device_discovery() {
                         detection_distance_state.c_str(),
                         detection_distance_set.c_str(),
                         0.5, 6.0, 0.1, "m", "detection_distance");
-  delay(50);
+  delay(100);
   
   publish_number_discovery("Sensitivity", "mdi:tune",
                         sensitivity_state.c_str(),
                         sensitivity_set.c_str(),
                         1, 10, 1, "", "sensitivity");
-  delay(50);
+  delay(100);
   
   // Publish the JSON sensors
   publish_json_sensor_discovery("Noise Parameters", "mdi:tune-vertical",
                            noise_params_state.c_str(),
                            noise_params_set.c_str(),
                            "noise_params");
-  delay(50);
+  delay(100);
   
   publish_json_sensor_discovery("Distance Settings", "mdi:ruler-square",
                            distance_settings_state.c_str(),
@@ -524,11 +545,18 @@ void publish_device_discovery() {
 // Helper function to add common device info to discovery messages
 void add_device_info(JsonDocument& doc) {
   JsonObject device = doc.createNestedObject("device");
-  device["identifiers"] = String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX);
+  
+  // Create an array for identifiers (Home Assistant prefers array format)
+  JsonArray identifiers = device.createNestedArray("identifiers");
+  identifiers.add(String(MQTT_UNIQUE_ID) + "_" + String(ESP.getChipModel(), HEX));
+  
   device["name"] = "RD03E Radar Sensor";
   device["model"] = "RD03E";
   device["manufacturer"] = "ai-thinker";
   device["sw_version"] = "1.0.0";
+  
+  // Add suggested_area if you have one
+  // device["suggested_area"] = "Living Room";
 }
 
 // Helper to publish a binary sensor discovery
@@ -548,6 +576,11 @@ void publish_binary_sensor_discovery(const char* name, const char* device_class,
   
   char buffer[384];
   size_t length = serializeJson(doc, buffer, sizeof(buffer));
+  
+  // Debug: Print the complete discovery message
+  Serial.print("[DISCOVERY JSON] ");
+  serializeJson(doc, Serial);
+  Serial.println();
   
   String topic = String(MQTT_DISCOVERY_BINARY_SENSOR) + "/" + MQTT_DEVICE_ID + "/" + unique_id_suffix + "/config";
   bool result = mqtt_client.publish(topic.c_str(), buffer, true);
@@ -571,7 +604,13 @@ void publish_distance_sensor_discovery() {
   char buffer[384];
   size_t length = serializeJson(doc, buffer, sizeof(buffer));
   
-  bool result = mqtt_client.publish(MQTT_DISCOVERY_DISTANCE, buffer, true);
+  // Debug: Print the complete discovery message
+  Serial.print("[DISCOVERY JSON] ");
+  serializeJson(doc, Serial);
+  Serial.println();
+  
+  String topic = String(MQTT_DISCOVERY_SENSOR) + "/" + MQTT_DEVICE_ID + "/distance/config";
+  bool result = mqtt_client.publish(topic.c_str(), buffer, true);
   Serial.printf("[MQTT DISCOVERY] Distance sensor: %s\n", result ? "OK" : "Failed");
 }
 
@@ -584,6 +623,7 @@ void publish_number_discovery(const char* name, const char* icon, const char* st
   doc["state_topic"] = state_topic;
   doc["command_topic"] = command_topic;
   doc["availability_topic"] = MQTT_STATUS_TOPIC;
+  doc["entity_category"] = "config";
   
   if (strlen(unit) > 0) {
     doc["unit_of_measurement"] = unit;
@@ -600,7 +640,12 @@ void publish_number_discovery(const char* name, const char* icon, const char* st
   char buffer[384];
   size_t length = serializeJson(doc, buffer, sizeof(buffer));
   
-  String topic = String(MQTT_DISCOVERY_SENSOR) + "/" + MQTT_DEVICE_ID + "/" + unique_id_suffix + "/config";
+  // Debug: Print the complete discovery message
+  Serial.print("[DISCOVERY JSON] ");
+  serializeJson(doc, Serial);
+  Serial.println();
+  
+  String topic = String(MQTT_DISCOVERY_PREFIX) + "/number/" + MQTT_DEVICE_ID + "/" + unique_id_suffix + "/config";
   bool result = mqtt_client.publish(topic.c_str(), buffer, true);
   Serial.printf("[MQTT DISCOVERY] %s setting: %s\n", name, result ? "OK" : "Failed");
 }
@@ -616,12 +661,18 @@ void publish_json_sensor_discovery(const char* name, const char* icon, const cha
   doc["command_topic"] = command_topic;
   doc["availability_topic"] = MQTT_STATUS_TOPIC;
   doc["unique_id"] = String(MQTT_UNIQUE_ID) + "_" + unique_id_suffix + "_" + String(ESP.getChipModel(), HEX);
+  doc["entity_category"] = "config";
   
   // Add the device info
   add_device_info(doc);
   
   char buffer[384];
   size_t length = serializeJson(doc, buffer, sizeof(buffer));
+  
+  // Debug: Print the complete discovery message
+  Serial.print("[DISCOVERY JSON] ");
+  serializeJson(doc, Serial);
+  Serial.println();
   
   String topic = String(MQTT_DISCOVERY_SENSOR) + "/" + MQTT_DEVICE_ID + "/" + unique_id_suffix + "/config";
   bool result = mqtt_client.publish(topic.c_str(), buffer, true);

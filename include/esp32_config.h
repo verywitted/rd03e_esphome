@@ -19,6 +19,9 @@
 #define MQTT_UNIQUE_ID "RD03E"
 #define MQTT_NODE_ID ESP.getChipModel();
 
+// Home Assistant global status topic for detecting device availability
+#define MQTT_HA_STATUS_TOPIC "homeassistant/status"
+
 // Device topic structure for state updates
 #define MQTT_BASE_TOPIC "rd03e_radar"
 #define MQTT_PRESENCE_TOPIC MQTT_BASE_TOPIC "/presence/state"
@@ -31,11 +34,7 @@
 // Discovery Topics
 #define MQTT_DISCOVERY_BINARY_SENSOR MQTT_DISCOVERY_PREFIX "/binary_sensor"
 #define MQTT_DISCOVERY_SENSOR MQTT_DISCOVERY_PREFIX "/sensor"
-#define MQTT_DISCOVERY_PRESENCE MQTT_DISCOVERY_BINARY_SENSOR "/" MQTT_DEVICE_ID "/presence/config"
-#define MQTT_DISCOVERY_MOVEMENT MQTT_DISCOVERY_BINARY_SENSOR "/" MQTT_DEVICE_ID "/movement/config"
-#define MQTT_DISCOVERY_DISTANCE MQTT_DISCOVERY_SENSOR "/" MQTT_DEVICE_ID "/distance/config"
-#define MQTT_DISCOVERY_SENSITIVITY MQTT_DISCOVERY_SENSOR "/" MQTT_DEVICE_ID "/sensitivity/config"
-#define MQTT_DISCOVERY_DETECTION_DISTANCE MQTT_DISCOVERY_SENSOR "/" MQTT_DEVICE_ID "/detection_distance/config"
+#define MQTT_DISCOVERY_NUMBER MQTT_DISCOVERY_PREFIX "/number"
 
 // RD03-E Radar settings
 #define RADAR_RX_PIN 16    // GPIO16 for receiving data from radar
